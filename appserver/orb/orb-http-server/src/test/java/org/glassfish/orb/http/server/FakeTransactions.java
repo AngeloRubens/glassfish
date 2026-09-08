@@ -81,6 +81,10 @@ final class FakeTransactions implements TransactionBridge {
         record("recreate(" + Xids.key(xid) + "," + timeoutSeconds + ")");
         maybeFail("recreate");
         imported.put(Xids.key(xid), timeoutSeconds);
+        // Importing is how a server learns about a branch it did not begin,
+        // which is the whole of the XA case: the coordinator mints the xid and
+        // this side hears about it when work arrives for it.
+        live.putIfAbsent(Xids.key(xid), xid);
     }
 
     @Override
@@ -99,6 +103,7 @@ final class FakeTransactions implements TransactionBridge {
     public int prepare(Xid xid) throws TransactionException {
         record("prepare");
         maybeFail("prepare");
+        requireLive(xid);
         prepared.add(xid);
         return voteReadOnly ? XAResource.XA_RDONLY : XAResource.XA_OK;
     }
