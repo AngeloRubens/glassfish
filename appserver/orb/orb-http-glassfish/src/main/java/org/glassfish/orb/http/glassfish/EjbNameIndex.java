@@ -25,6 +25,8 @@ import com.sun.enterprise.deployment.EjbDescriptor;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 
+import java.lang.System.Logger;
+import java.lang.System.Logger.Level;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -53,6 +55,8 @@ import org.jvnet.hk2.annotations.Service;
 @Service
 @Singleton
 public class EjbNameIndex {
+
+    private static final Logger LOG = System.getLogger(EjbNameIndex.class.getName());
 
     @Inject
     private ApplicationRegistry applications;
@@ -95,27 +99,42 @@ public class EjbNameIndex {
         return id != null ? id : byName.get(key(appName, null, beanName));
     }
 
-    /** Rebuilds the index from what is deployed right now. */
+    /**
+     * Rebuilds the index from what is deployed right now.
+     *
+     * <p>Logs what it found. A miss here presents as a 404 on an invocation,
+     * which is indistinguishable from a bean that was never deployed and from
+     * a name spelled wrong, so the only way to tell the three apart from the
+     * outside is for this to say what it saw.
+     */
     public void refresh() {
         Map<String, Long> rebuilt = new ConcurrentHashMap<>();
         for (String name : applications.getAllApplicationNames()) {
             ApplicationInfo info = applications.get(name);
             if (info == null) {
+                LOG.log(Level.DEBUG, "application {0} is registered but has no info", name);
                 continue;
             }
             Application application = info.getMetaData(Application.class);
             if (application == null) {
-                // Not a Jakarta EE application; it has no EJBs to index.
+                LOG.log(Level.DEBUG, "application {0} carries no Application metadata", name);
                 continue;
             }
+            int before = rebuilt.size();
             index(application, rebuilt);
+            LOG.log(Level.INFO, "indexed {0} bean key(s) for application {1} (registration name {2})",
+                    rebuilt.size() - before, name, application.getRegistrationName());
         }
         byName.clear();
         byName.putAll(rebuilt);
+        LOG.log(Level.INFO, "EJB name index rebuilt: {0}", rebuilt.keySet());
     }
 
     private void index(Application application, Map<String, Long> into) {
-        for (EjbBundleDescriptor bundle : application.getBundleDescriptors(EjbBundleDescriptor.class)) {
+        var bundles = application.getBundleDescriptors(EjbBundleDescriptor.class);
+        LOG.log(Level.INFO, "application {0} has {1} EJB bundle(s)",
+                application.getRegistrationName(), bundles.size());
+        for (EjbBundleDescriptor bundle : bundles) {
             String moduleName = bundle.getModuleDescriptor().getModuleName();
             for (EjbDescriptor ejb : bundle.getEjbs()) {
                 into.put(key(application.getRegistrationName(), moduleName, ejb.getName()),
