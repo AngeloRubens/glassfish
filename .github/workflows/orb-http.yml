@@ -1,0 +1,131 @@
+# Continuous integration for the ORB-over-HTTP modules.
+#
+# Deliberately NOT part of the pull request to eclipse-ee4j/glassfish: that
+# project builds on the Eclipse Foundation's Jenkins, and a GitHub Actions
+# workflow in the PR would be infrastructure the maintainers did not ask for
+# and do not run. This lives on a branch of the fork and exists for us.
+#
+# Two jobs, because they answer different questions.
+#
+#   unit    - do the modules build and do their own tests pass? Fast, hermetic,
+#             runs on every push.
+#
+#   iiop    - what does a remote EJB over IIOP actually do, against a real
+#             GlassFish? This is the baseline the HTTP transport claims to
+#             reproduce. Today it establishes that baseline and nothing more:
+#             the HTTP half cannot be run against a real server until the
+#             adapter binding ContainerBridge to the container exists, so the
+#             comparison this job is built for is still one-sided. It is here
+#             so that the day the adapter lands, the second arm is a step
+#             rather than a project.
+
+name: ORB over HTTP
+
+on:
+  push:
+    branches: [ 'ci-integration', 'orb-http-*' ]
+  pull_request:
+    branches: [ 'ci-integration' ]
+  workflow_dispatch:
+
+env:
+  GLASSFISH_VERSION: 8.0.4
+
+jobs:
+
+  unit:
+    name: Modules and their tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Compile with all warnings enabled
+        run: |
+          set -euo pipefail
+          # javac directly rather than through the reactor: these three modules
+          # have no GlassFish dependencies, which is a property worth keeping
+          # and worth failing the build over if it is ever lost.
+          mkdir -p /tmp/out/{protocol,client,server}
+          EJB=$(find ~/.m2 -name 'jakarta.ejb-api-*.jar' | head -1 || true)
+          if [ -z "$EJB" ]; then
+            mvn -q dependency:get -Dartifact=jakarta.ejb:jakarta.ejb-api:4.0.1
+            EJB=$(find ~/.m2 -name 'jakarta.ejb-api-*.jar' | head -1)
+          fi
+          javac -Werror -Xlint:all -d /tmp/out/protocol \
+            $(find appserver/orb/orb-http-protocol/src/main/java -name '*.java')
+          javac -Werror -Xlint:all -cp "/tmp/out/protocol:$EJB" -d /tmp/out/client \
+            $(find appserver/orb/orb-http-client/src/main/java -name '*.java')
+          javac -Werror -Xlint:all -cp /tmp/out/protocol -d /tmp/out/server \
+            $(find appserver/orb/orb-http-server/src/main/java -name '*.java')
+
+      - name: Checkstyle, with the project's own configuration
+        run: |
+          set -euo pipefail
+          curl -sL -o /tmp/checkstyle.jar \
+            https://github.com/checkstyle/checkstyle/releases/download/checkstyle-13.9.0/checkstyle-13.9.0-all.jar
+          java -jar /tmp/checkstyle.jar \
+            -c qa/src/main/resources/org/glassfish/qa/config/checkstyle/checkstyle.xml \
+            $(find appserver/orb/orb-http-* -name '*.java') > /tmp/checkstyle.txt || true
+          errors=$(grep -c '^\[ERROR\]' /tmp/checkstyle.txt || true)
+          echo "checkstyle errors: $errors"
+          grep '^\[ERROR\]' /tmp/checkstyle.txt || true
+          test "$errors" -eq 0
+
+      - name: Run the tests
+        run: ci/run-unit-tests.sh
+
+  iiop:
+    name: IIOP baseline against a real GlassFish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Download GlassFish ${{ env.GLASSFISH_VERSION }}
+        run: |
+          set -euo pipefail
+          curl -sL -o /tmp/glassfish.zip \
+            "https://github.com/eclipse-ee4j/glassfish/releases/download/${GLASSFISH_VERSION}/glassfish-${GLASSFISH_VERSION}.zip"
+          unzip -q /tmp/glassfish.zip -d /opt
+          echo "GLASSFISH_HOME=/opt/glassfish8" >> "$GITHUB_ENV"
+
+      - name: Start the domain
+        run: |
+          set -euo pipefail
+          "$GLASSFISH_HOME/bin/asadmin" start-domain
+          "$GLASSFISH_HOME/bin/asadmin" list-domains
+
+      - name: Build and deploy the test bean
+        run: |
+          set -euo pipefail
+          mvn -q -f ci/iiop-baseline/pom.xml package
+          "$GLASSFISH_HOME/bin/asadmin" deploy --force \
+            ci/iiop-baseline/bean/target/orb-baseline-bean.jar
+          "$GLASSFISH_HOME/bin/asadmin" list-applications
+
+      - name: Invoke it over IIOP and check what a remote view actually carries
+        run: |
+          set -euo pipefail
+          java -cp "ci/iiop-baseline/client/target/orb-baseline-client.jar:$GLASSFISH_HOME/glassfish/lib/gf-client.jar" \
+            org.glassfish.orb.baseline.IiopBaseline
+
+      - name: Server log on failure
+        if: failure()
+        run: tail -200 "$GLASSFISH_HOME/glassfish/domains/domain1/logs/server.log" || true
+
+      - name: Stop the domain
+        if: always()
+        run: "$GLASSFISH_HOME/bin/asadmin" stop-domain || true
