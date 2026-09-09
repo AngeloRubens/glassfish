@@ -91,6 +91,12 @@ public final class Baseline {
             } catch (Values.Exploded original) {
                 throw new AssertionError("a system exception was let through unchanged;"
                         + " it is supposed to be wrapped and the instance discarded");
+            } catch (jakarta.ejb.NoSuchEJBException missing) {
+                // NoSuchEJBException extends EJBException, so catching the
+                // parent alone let this case pass on a run where every other
+                // case failed with exactly this - a test that reports success
+                // when nothing works is worse than no test.
+                throw new AssertionError("the bean was not reachable at all: " + missing);
             } catch (jakarta.ejb.EJBException wrapped) {
                 // The contract: unchecked and unannotated is a system failure,
                 // and the caller sees EJBException rather than what was thrown.
