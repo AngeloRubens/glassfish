@@ -128,4 +128,5 @@ jobs:
 
       - name: Stop the domain
         if: always()
-        run: "$GLASSFISH_HOME/bin/asadmin" stop-domain || true
+        run: |
+          "$GLASSFISH_HOME/bin/asadmin" stop-domain || true
