@@ -38,5 +38,11 @@
       <version>10.0.0</version>
       <scope>provided</scope>
     </dependency>
+    <dependency>
+      <groupId>org.glassfish.main.orb</groupId>
+      <artifactId>orb-http-client</artifactId>
+      <version>8.0.5-SNAPSHOT</version>
+      <scope>provided</scope>
+    </dependency>
   </dependencies>
 </project>
