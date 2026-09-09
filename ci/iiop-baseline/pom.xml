@@ -28,5 +28,6 @@
     <modules>
         <module>bean</module>
         <module>client</module>
+        <module>client-http</module>
     </modules>
 </project>
