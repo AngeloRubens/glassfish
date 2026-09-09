@@ -122,9 +122,19 @@ jobs:
           # gf-client.jar names the rest of the client stack through its
           # manifest Class-Path; the bean jar carries the remote interface and
           # the value types, which the client needs to be able to load.
+          # gf-client.jar is supposed to name the rest of the client stack
+          # through its manifest Class-Path, and on this image it does not
+          # resolve - SerialInitContextFactory came back ClassNotFound. The
+          # module directory is where those jars actually live, so name it.
+          echo "-- looking for the naming implementation:"
+          ls "$GLASSFISH_HOME/glassfish/modules/" | grep -i naming || true
+          unzip -p "$GLASSFISH_HOME/glassfish/lib/gf-client.jar" META-INF/MANIFEST.MF \
+            | head -5 || true
+
           cp="ci/iiop-baseline/client/target/orb-baseline-client.jar"
           cp="$cp:ci/iiop-baseline/bean/target/orb-baseline-bean.jar"
           cp="$cp:$GLASSFISH_HOME/glassfish/lib/gf-client.jar"
+          cp="$cp:$GLASSFISH_HOME/glassfish/modules/*"
           echo "classpath: $cp"
           java -cp "$cp" org.glassfish.orb.baseline.IiopBaseline
 
