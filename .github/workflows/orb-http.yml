@@ -119,8 +119,14 @@ jobs:
       - name: Invoke it over IIOP and check what a remote view actually carries
         run: |
           set -euo pipefail
-          java -cp "ci/iiop-baseline/client/target/orb-baseline-client.jar:$GLASSFISH_HOME/glassfish/lib/gf-client.jar" \
-            org.glassfish.orb.baseline.IiopBaseline
+          # gf-client.jar names the rest of the client stack through its
+          # manifest Class-Path; the bean jar carries the remote interface and
+          # the value types, which the client needs to be able to load.
+          cp="ci/iiop-baseline/client/target/orb-baseline-client.jar"
+          cp="$cp:ci/iiop-baseline/bean/target/orb-baseline-bean.jar"
+          cp="$cp:$GLASSFISH_HOME/glassfish/lib/gf-client.jar"
+          echo "classpath: $cp"
+          java -cp "$cp" org.glassfish.orb.baseline.IiopBaseline
 
       - name: Server log on failure
         if: failure()

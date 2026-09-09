@@ -1,8 +1,10 @@
 package org.glassfish.orb.baseline;
 
 import java.util.ArrayList;
+import java.util.Hashtable;
 import java.util.List;
 
+import javax.naming.Context;
 import javax.naming.InitialContext;
 
 /**
@@ -31,7 +33,15 @@ public final class IiopBaseline {
     }
 
     public static void main(String[] args) throws Exception {
-        InitialContext context = new InitialContext();
+        Hashtable<String, String> environment = new Hashtable<>();
+        environment.put(Context.INITIAL_CONTEXT_FACTORY,
+                "com.sun.enterprise.naming.SerialInitContextFactory");
+        environment.put("org.omg.CORBA.ORBInitialHost",
+                System.getProperty("orb.host", "localhost"));
+        environment.put("org.omg.CORBA.ORBInitialPort",
+                System.getProperty("orb.port", "3700"));
+
+        InitialContext context = new InitialContext(environment);
 
         Greeter greeter = (Greeter) context.lookup(
                 "java:global/" + APP + "/GreeterBean!" + Greeter.class.getName());
