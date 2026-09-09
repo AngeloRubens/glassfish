@@ -56,6 +56,23 @@ import org.jvnet.hk2.annotations.Service;
 @Singleton
 public class GlassFishContainerBridge implements ContainerBridge {
 
+    /**
+     * The instance key every stateless and singleton reference carries.
+     *
+     * <p>Not invented here: {@code StatelessSessionContainer} and
+     * {@code AbstractSingletonContainer} both hold exactly this array, because
+     * all instances of such a bean are interchangeable and so share one remote
+     * reference. Its shape is also load-bearing - the container's comment says
+     * "the first byte of instanceKey must be left empty" - which is why it is
+     * copied rather than approximated.
+     *
+     * <p>Using the home key here instead, as this did, asks the container for
+     * the bean's <em>home</em> and gets it: a GenericEJBHome, which has no
+     * business methods. Every invocation then failed as though the bean did
+     * not exist.
+     */
+    private static final byte[] SHARED_INSTANCE_KEY = { 0, 0, 0, 1 };
+
     @Inject
     private EjbNameIndex index;
 
@@ -78,7 +95,9 @@ public class GlassFishContainerBridge implements ContainerBridge {
             throw new NoSuchTargetException("no bean " + beanName
                     + " in " + appName + '/' + moduleName);
         }
-        return sessionId == null ? EjbKey.home(ejbId) : new EjbKey(ejbId, sessionId);
+        // A stateful conversation names its own instance; everything else
+        // shares the one reference the container publishes for the bean.
+        return new EjbKey(ejbId, sessionId == null ? SHARED_INSTANCE_KEY : sessionId);
     }
 
     @Override
