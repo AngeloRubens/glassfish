@@ -53,7 +53,16 @@ public final class Values {
         }
     }
 
-    /** An application exception carrying business state, not just a message. */
+    /**
+     * An application exception carrying business state.
+     *
+     * <p>The annotation is the whole difference. Without it an unchecked
+     * exception is a <em>system</em> exception: the container wraps it in
+     * EJBException and discards the bean instance, and the caller never sees
+     * the type it threw. With it, the exception is part of the business
+     * contract and arrives intact.
+     */
+    @jakarta.ejb.ApplicationException(rollback = true)
     public static final class Refused extends RuntimeException {
 
         private static final long serialVersionUID = 1L;
@@ -74,6 +83,22 @@ public final class Values {
 
         public List<String> offending() {
             return offending;
+        }
+    }
+
+    /**
+     * Not annotated, so the container must treat it as a system failure.
+     *
+     * <p>Measuring this matters as much as measuring the case above: a
+     * transport that let this one through unchanged would be quietly changing
+     * the exception contract an application was written against.
+     */
+    public static final class Exploded extends RuntimeException {
+
+        private static final long serialVersionUID = 1L;
+
+        public Exploded(String message) {
+            super(message);
         }
     }
 }

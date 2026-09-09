@@ -97,6 +97,20 @@ public final class IiopBaseline {
             }
         });
 
+        check("an unannotated unchecked exception becomes EJBException", () -> {
+            try {
+                greeter.explode();
+                throw new AssertionError("no exception was thrown");
+            } catch (Values.Exploded original) {
+                throw new AssertionError("the container let a system exception through unchanged;"
+                        + " it is supposed to wrap it and discard the instance");
+            } catch (jakarta.ejb.EJBException wrapped) {
+                // This is the contract: unchecked and unannotated means system
+                // failure, and the caller sees EJBException rather than the
+                // type the bean threw.
+            }
+        });
+
         check("a large payload round trips", () -> {
             String payload = "x".repeat(2 * 1024 * 1024);
             expect(payload.length(), greeter.echoLarge(payload).length());

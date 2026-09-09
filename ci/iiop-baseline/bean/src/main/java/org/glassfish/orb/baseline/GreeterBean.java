@@ -31,6 +31,11 @@ public class GreeterBean implements Greeter {
     }
 
     @Override
+    public void explode() {
+        throw new Values.Exploded("an unchecked exception the bean never declared");
+    }
+
+    @Override
     public void refuse() {
         throw new Values.Refused("not today", "E_CLOSED",
                 new IllegalStateException("underlying cause"));

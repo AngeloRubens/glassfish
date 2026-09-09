@@ -17,4 +17,6 @@ public interface Greeter {
     String echoLarge(String payload);
 
     void refuse();
+
+    void explode();
 }
