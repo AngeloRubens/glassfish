@@ -136,3 +136,132 @@ jobs:
         if: always()
         run: |
           "$GLASSFISH_HOME/bin/asadmin" stop-domain || true
+
+  reactor:
+    name: Maven reactor build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      # -am builds the GlassFish modules these depend on, which is most of the
+      # cost and all of the point: it is what proves the poms are right, that
+      # the project's own checkstyle plugin passes, and that surefire runs the
+      # tests. Doing it here rather than on a laptop is the difference between
+      # a claim and a check anyone can repeat.
+      - name: Build the transport modules through the reactor
+        run: |
+          mvn -B -am -DskipTests=false \
+            -pl appserver/orb/orb-http-protocol,appserver/orb/orb-http-client,appserver/orb/orb-http-server \
+            install
+
+      - name: Build the container integration module
+        run: mvn -B -DskipTests -pl appserver/orb/orb-http-glassfish install
+
+      - name: Check the modules are OSGi bundles
+        run: |
+          set -euo pipefail
+          # A plain jar in GlassFish's module directory exports nothing and is
+          # invisible to the container. This has been wrong once already.
+          for m in orb-http-protocol orb-http-client orb-http-server orb-http-glassfish; do
+            jar=$(find ~/.m2/repository -name "$m-*.jar" ! -name '*sources*' | head -1)
+            echo "-- $m"
+            unzip -p "$jar" META-INF/MANIFEST.MF | grep -q 'Bundle-SymbolicName' \
+              || { echo "   NOT an OSGi bundle"; exit 1; }
+            unzip -p "$jar" META-INF/MANIFEST.MF | grep 'Bundle-SymbolicName'
+          done
+
+      - name: Keep the jars for the integration job
+        uses: actions/upload-artifact@v4
+        with:
+          name: orb-http-modules
+          path: ~/.m2/repository/org/glassfish/main/orb/orb-http-*/**/*.jar
+          retention-days: 1
+
+  http:
+    name: HTTP transport against a real GlassFish
+    runs-on: ubuntu-latest
+    needs: reactor
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Download GlassFish ${{ env.GLASSFISH_VERSION }}
+        run: |
+          set -euo pipefail
+          curl -sL -o /tmp/glassfish.zip \
+            "https://github.com/eclipse-ee4j/glassfish/releases/download/${GLASSFISH_VERSION}/glassfish-${GLASSFISH_VERSION}.zip"
+          unzip -q /tmp/glassfish.zip -d /opt
+          echo "GLASSFISH_HOME=/opt/glassfish8" >> "$GITHUB_ENV"
+
+      - name: Build the modules
+        run: |
+          mvn -B -am -DskipTests \
+            -pl appserver/orb/orb-http-protocol,appserver/orb/orb-http-client,appserver/orb/orb-http-server \
+            install
+          mvn -B -DskipTests -pl appserver/orb/orb-http-glassfish install
+
+      - name: Inject them into the server
+        run: |
+          set -euo pipefail
+          # The jars are 8.0.5-SNAPSHOT and the server is a released 8.0.4.
+          # If OSGi refuses them on a version range this is where it shows,
+          # and the answer would be to build the distribution from source
+          # instead. Trying the cheap thing first, and saying so.
+          for m in orb-http-protocol orb-http-client orb-http-server orb-http-glassfish; do
+            jar=$(find ~/.m2/repository/org/glassfish/main/orb -name "$m-*.jar" ! -name '*sources*' | head -1)
+            echo "installing $(basename "$jar")"
+            cp "$jar" "$GLASSFISH_HOME/glassfish/modules/"
+          done
+
+      - name: Start the domain and deploy the bean
+        run: |
+          set -euo pipefail
+          "$GLASSFISH_HOME/bin/asadmin" start-domain
+          mvn -B -q -f ci/iiop-baseline/pom.xml package
+          "$GLASSFISH_HOME/bin/asadmin" deploy --force \
+            ci/iiop-baseline/bean/target/orb-baseline-bean.jar
+
+      - name: Did the endpoint actually mount?
+        run: |
+          set -euo pipefail
+          grep -i "glassfish-services\|OrbHttpEndpoint" \
+            "$GLASSFISH_HOME/glassfish/domains/domain1/logs/server.log" || true
+          # A 404 means routed but no such operation, which is a mounted
+          # endpoint. Connection refused means it never mounted.
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            "http://localhost:8080/glassfish-services/common/v1/affinity" || echo "000")
+          echo "affinity endpoint answered: $code"
+          test "$code" != "000"
+
+      - name: Invoke the same bean over HTTP
+        run: |
+          set -euo pipefail
+          cp="ci/iiop-baseline/client/target/orb-baseline-client.jar"
+          for m in orb-http-client orb-http-protocol; do
+            cp="$cp:$(find ~/.m2/repository/org/glassfish/main/orb -name "$m-*.jar" ! -name '*sources*' | head -1)"
+          done
+          cp="$cp:$(find ~/.m2/repository/jakarta/ejb -name 'jakarta.ejb-api-*.jar' | head -1)"
+          echo "classpath: $cp"
+          java -cp "$cp" org.glassfish.orb.baseline.HttpBaseline
+
+      - name: Server log on failure
+        if: failure()
+        run: tail -300 "$GLASSFISH_HOME/glassfish/domains/domain1/logs/server.log" || true
+
+      - name: Stop the domain
+        if: always()
+        run: |
+          "$GLASSFISH_HOME/bin/asadmin" stop-domain || true
