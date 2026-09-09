@@ -113,7 +113,10 @@ jobs:
       - name: Build and deploy the test bean
         run: |
           set -euo pipefail
-          mvn -q -f ci/iiop-baseline/pom.xml package
+          # Only the two modules this arm needs. client-http depends on the
+          # transport, and a control arm that cannot build without the thing
+          # it is controlling for is not a control.
+          mvn -q -f ci/iiop-baseline/pom.xml -pl bean,client package
           "$GLASSFISH_HOME/bin/asadmin" deploy --force \
             ci/iiop-baseline/bean/target/orb-baseline-bean.jar
           "$GLASSFISH_HOME/bin/asadmin" list-applications

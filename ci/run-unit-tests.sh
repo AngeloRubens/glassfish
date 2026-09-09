@@ -6,6 +6,10 @@
 # useless as a fast signal. They have no GlassFish dependencies - that is a
 # deliberate property of the design - so javac and the JUnit platform launcher
 # are enough.
+# orb-http-glassfish is deliberately not built here. It is the one module
+# with GlassFish dependencies - Grizzly, the kernel, the EJB container - and
+# assembling that classpath by hand would be reimplementing Maven badly. The
+# reactor job builds it properly.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -30,11 +34,14 @@ mkdir -p "$out/classes" "$out/tests"
 
 echo "== main =="
 javac -nowarn -cp "$deps" -d "$out/classes" \
-    $(find "$root"/appserver/orb/orb-http-*/src/main/java -name '*.java')
+    $(find "$root"/appserver/orb/orb-http-protocol/src/main/java \
+           "$root"/appserver/orb/orb-http-client/src/main/java \
+           "$root"/appserver/orb/orb-http-server/src/main/java -name '*.java')
 
 echo "== test =="
 javac -nowarn -cp "$out/classes:$deps:$CONSOLE" -d "$out/tests" \
-    $(find "$root"/appserver/orb/orb-http-*/src/test/java -name '*.java')
+    $(find "$root"/appserver/orb/orb-http-protocol/src/test/java \
+           "$root"/appserver/orb/orb-http-server/src/test/java -name '*.java')
 
 echo "== run =="
 java -jar "$CONSOLE" execute \
