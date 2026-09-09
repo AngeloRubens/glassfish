@@ -253,6 +253,12 @@ jobs:
           echo "affinity endpoint answered: $code"
           test "$code" != "000"
 
+      - name: What did the index see?
+        run: |
+          grep -E "EJB name index|EJB bundle|indexed .* bean key" \
+            "$GLASSFISH_HOME/glassfish/domains/domain1/logs/server.log" || \
+            echo "(the index never ran - nothing has asked it to resolve a name yet)"
+
       - name: Invoke the same bean over HTTP
         run: |
           set -euo pipefail
@@ -264,6 +270,12 @@ jobs:
           cp="$cp:$(find ~/.m2/repository/jakarta/ejb -name 'jakarta.ejb-api-*.jar' | head -1)"
           echo "classpath: $cp"
           java -cp "$cp" org.glassfish.orb.baseline.HttpBaseline
+
+      - name: What the index saw, after the attempt
+        if: always()
+        run: |
+          grep -E "EJB name index|EJB bundle|indexed .* bean key" \
+            "$GLASSFISH_HOME/glassfish/domains/domain1/logs/server.log" || true
 
       - name: Server log on failure
         if: failure()
