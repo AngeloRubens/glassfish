@@ -24,17 +24,6 @@
             <version>10.0.0</version>
             <scope>provided</scope>
         </dependency>
-        <!--
-            provided, not compile: the HTTP client belongs on the runtime
-            classpath alongside this jar, not shaded inside it. Shading it
-            would test a copy rather than the artifact a user would install.
-        -->
-        <dependency>
-            <groupId>org.glassfish.main.orb</groupId>
-            <artifactId>orb-http-client</artifactId>
-            <version>8.0.5-SNAPSHOT</version>
-            <scope>provided</scope>
-        </dependency>
     </dependencies>
 
     <build>

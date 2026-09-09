@@ -62,7 +62,9 @@ jobs:
             $(find appserver/orb/orb-http-protocol/src/main/java -name '*.java')
           javac -Werror -Xlint:all -cp "/tmp/out/protocol:$EJB" -d /tmp/out/client \
             $(find appserver/orb/orb-http-client/src/main/java -name '*.java')
-          javac -Werror -Xlint:all -cp /tmp/out/protocol -d /tmp/out/server \
+          # The server module needs jakarta.ejb too: applying the Enterprise
+          # Beans exception contract means knowing what EJBException is.
+          javac -Werror -Xlint:all -cp "/tmp/out/protocol:$EJB" -d /tmp/out/server \
             $(find appserver/orb/orb-http-server/src/main/java -name '*.java')
 
       - name: Checkstyle, with the project's own configuration
@@ -162,7 +164,9 @@ jobs:
             install
 
       - name: Build the container integration module
-        run: mvn -B -DskipTests -pl appserver/orb/orb-http-glassfish install
+        # -am: this one depends on ejb-container, glassfish-naming, the kernel
+        # and Grizzly, none of which exist as 8.0.5-SNAPSHOT until built.
+        run: mvn -B -DskipTests -am -pl appserver/orb/orb-http-glassfish install
 
       - name: Check the modules are OSGi bundles
         run: |
@@ -249,7 +253,8 @@ jobs:
       - name: Invoke the same bean over HTTP
         run: |
           set -euo pipefail
-          cp="ci/iiop-baseline/client/target/orb-baseline-client.jar"
+          cp="ci/iiop-baseline/client-http/target/orb-baseline-client-http.jar"
+          cp="$cp:ci/iiop-baseline/client/target/orb-baseline-client.jar"
           for m in orb-http-client orb-http-protocol; do
             cp="$cp:$(find ~/.m2/repository/org/glassfish/main/orb -name "$m-*.jar" ! -name '*sources*' | head -1)"
           done

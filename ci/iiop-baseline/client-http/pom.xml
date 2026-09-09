@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.glassfish.orb.baseline</groupId>
+        <artifactId>orb-baseline</artifactId>
+        <version>1.0</version>
+    </parent>
+
+    <artifactId>orb-baseline-client-http</artifactId>
+    <packaging>jar</packaging>
+
+    <description>
+        The HTTP arm of the baseline. Separate from the IIOP arm for one
+        reason: it needs orb-http-client and the IIOP arm does not, and having
+        them share a module meant the IIOP job could not build without first
+        building the transport it exists to be compared against.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.glassfish.orb.baseline</groupId>
+            <artifactId>orb-baseline-client</artifactId>
+            <version>1.0</version>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.platform</groupId>
+            <artifactId>jakarta.jakartaee-api</artifactId>
+            <version>10.0.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <!-- provided: it belongs beside this jar on the runtime classpath,
+             which is where a user would put it, not shaded inside it. -->
+        <dependency>
+            <groupId>org.glassfish.main.orb</groupId>
+            <artifactId>orb-http-client</artifactId>
+            <version>8.0.5-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>orb-baseline-client-http</finalName>
+    </build>
+</project>
