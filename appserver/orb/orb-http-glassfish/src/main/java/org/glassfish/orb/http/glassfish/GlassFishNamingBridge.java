@@ -21,6 +21,7 @@ package org.glassfish.orb.http.glassfish;
 import com.sun.enterprise.naming.impl.ProviderManager;
 import com.sun.enterprise.naming.impl.SerialContextProvider;
 
+import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 
 import java.util.HashMap;
@@ -28,6 +29,7 @@ import java.util.Map;
 
 import javax.naming.NamingException;
 
+import org.glassfish.orb.http.protocol.RemoteEjbReference;
 import org.glassfish.orb.http.server.NamingBridge;
 import org.jvnet.hk2.annotations.Service;
 
@@ -49,17 +51,88 @@ import org.jvnet.hk2.annotations.Service;
 @Singleton
 public class GlassFishNamingBridge implements NamingBridge {
 
+    /** The portable global JNDI prefix every remote bean is published under. */
+    private static final String GLOBAL = "java:global/";
+
+    @Inject
+    private EjbNameIndex index;
+
     private SerialContextProvider provider() {
         return ProviderManager.getProviderManager().getLocalProvider();
     }
 
     @Override
     public Object lookup(String name) throws NamingException {
+        RemoteEjbReference bean = asEjbReference(name);
+        if (bean != null) {
+            return bean;
+        }
         try {
             return provider().lookup(name);
         } catch (java.rmi.RemoteException e) {
             throw asNamingException("lookup", name, e);
         }
+    }
+
+    /**
+     * Turns a portable global name for a remote bean into something an HTTP
+     * client can use.
+     *
+     * <p>Without this the transport does not work at all, and the reason is
+     * worth stating. What the namespace holds for a remote bean is what
+     * {@code BaseContainer.publishObject} put there: an IIOP stub, or a
+     * {@code Reference} naming {@code IIOPObjectFactory}. Handing either to an
+     * HTTP client would be handing it a CORBA object it has no ORB to use and
+     * no way to marshal.
+     *
+     * <p>The portable global name is itself the answer, because it already
+     * carries every part of the locator:
+     * {@code java:global[/<app>]/<module>/<bean>[!<interface>]}. The index is
+     * consulted rather than trusted-by-syntax, so a name that parses but names
+     * no deployed bean falls through to the namespace and fails there, as it
+     * should.
+     *
+     * @param name the JNDI name being looked up
+     * @return a reference the client can turn into a proxy, or null if this is
+     *         not a remote bean
+     */
+    private RemoteEjbReference asEjbReference(String name) {
+        if (name == null || !name.startsWith(GLOBAL)) {
+            return null;
+        }
+        String remainder = name.substring(GLOBAL.length());
+
+        String viewClassName = null;
+        int bang = remainder.indexOf('!');
+        if (bang >= 0) {
+            viewClassName = remainder.substring(bang + 1);
+            remainder = remainder.substring(0, bang);
+        }
+
+        String[] parts = remainder.split("/");
+        String appName;
+        String moduleName;
+        String beanName;
+        if (parts.length == 3) {
+            appName = parts[0];
+            moduleName = parts[1];
+            beanName = parts[2];
+        } else if (parts.length == 2) {
+            // A standalone module: the application name is the module's.
+            appName = parts[0];
+            moduleName = parts[0];
+            beanName = parts[1];
+        } else {
+            return null;
+        }
+
+        if (viewClassName == null || index.lookup(appName, moduleName, beanName) == null) {
+            // Either the client did not say which view it wants - and a bean
+            // with several remote interfaces cannot be guessed at - or there is
+            // no such bean deployed. Let the namespace answer.
+            return null;
+        }
+        return new RemoteEjbReference(appName, moduleName, null, beanName, viewClassName, null);
     }
 
     @Override
