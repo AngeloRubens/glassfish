@@ -16,8 +16,10 @@
 
 package org.glassfish.orb.http.protocol;
 
+
 import java.util.Arrays;
 import java.util.Base64;
+
 import javax.transaction.xa.Xid;
 
 /**

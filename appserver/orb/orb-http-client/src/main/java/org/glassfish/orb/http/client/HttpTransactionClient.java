@@ -16,6 +16,7 @@
 
 package org.glassfish.orb.http.client;
 
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -23,9 +24,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+
 import javax.transaction.xa.XAException;
 import javax.transaction.xa.XAResource;
 import javax.transaction.xa.Xid;
+
 import org.glassfish.orb.http.protocol.Protocol;
 import org.glassfish.orb.http.protocol.ProtocolException;
 import org.glassfish.orb.http.protocol.TxRoutes;

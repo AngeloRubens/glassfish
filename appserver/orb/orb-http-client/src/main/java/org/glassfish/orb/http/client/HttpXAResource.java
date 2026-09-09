@@ -16,8 +16,10 @@
 
 package org.glassfish.orb.http.client;
 
+
 import java.net.URI;
 import java.util.Objects;
+
 import javax.transaction.xa.XAException;
 import javax.transaction.xa.XAResource;
 import javax.transaction.xa.Xid;

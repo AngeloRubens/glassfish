@@ -16,19 +16,18 @@
 
 package org.glassfish.orb.http.server;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import jakarta.transaction.RollbackException;
 import jakarta.transaction.Status;
+
 import java.net.URI;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+
 import javax.transaction.xa.XAException;
 import javax.transaction.xa.XAResource;
 import javax.transaction.xa.Xid;
+
 import org.glassfish.orb.http.client.ClientConfiguration;
 import org.glassfish.orb.http.client.ClientTransactionContext;
 import org.glassfish.orb.http.client.EjbLocator;
@@ -42,6 +41,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Drives transactions end to end: a real client, the real wire format, the
