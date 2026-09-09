@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.glassfish.orb.baseline</groupId>
+    <artifactId>orb-baseline</artifactId>
+    <version>1.0</version>
+    <packaging>pom</packaging>
+
+    <name>IIOP baseline for the ORB over HTTP work</name>
+    <description>
+        A remote EJB, and a client that invokes it over IIOP against a real
+        GlassFish. It exists to measure what a remote view actually carries
+        today, rather than asserting it - the HTTP transport claims to
+        reproduce this behaviour, and a claim of equivalence is worth no more
+        than the description of the thing being equalled.
+
+        Not part of the pull request. This is our own harness.
+    </description>
+
+    <properties>
+        <maven.compiler.release>21</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <modules>
+        <module>bean</module>
+        <module>client</module>
+    </modules>
+</project>
