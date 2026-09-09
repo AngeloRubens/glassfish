@@ -66,13 +66,33 @@ public class EjbNameIndex {
      * @return the container's id for that bean, or null if there is no such bean
      */
     public Long lookup(String appName, String moduleName, String beanName) {
-        String key = key(appName, moduleName, beanName);
-        Long id = byName.get(key);
+        Long id = find(appName, moduleName, beanName);
         if (id != null) {
             return id;
         }
         refresh();
-        return byName.get(key);
+        return find(appName, moduleName, beanName);
+    }
+
+    /**
+     * Exact match first, then module-agnostic.
+     *
+     * <p>The fallback is not laziness. A client reaching a bean by name may
+     * have got that name from {@code java:global/<module>/<bean>}, where the
+     * application and the module are the same word, or from
+     * {@code java:global/<app>/<module>/<bean>}, where they are not - and for
+     * a standalone jar the module name the deployment layer assigns is not
+     * necessarily either of them. Requiring the caller to have guessed it
+     * turns a deployed bean into a 404, which is what happened the first time
+     * this ran against a real server.
+     *
+     * <p>The ambiguous key is only ever populated when one bean of that name
+     * exists in the application, so the fallback cannot silently pick the
+     * wrong one.
+     */
+    private Long find(String appName, String moduleName, String beanName) {
+        Long id = byName.get(key(appName, moduleName, beanName));
+        return id != null ? id : byName.get(key(appName, null, beanName));
     }
 
     /** Rebuilds the index from what is deployed right now. */
