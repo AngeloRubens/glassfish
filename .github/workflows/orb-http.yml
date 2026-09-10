@@ -224,8 +224,12 @@ jobs:
           mvn -B -am -DskipTests \
             -pl appserver/orb/orb-http-protocol,appserver/orb/orb-http-client,appserver/orb/orb-http-server \
             install
-          mvn -B -DskipTests -pl appserver/orb/orb-http-glassfish install
-          mvn -B -DskipTests -pl appserver/orb/orb-http-codec-fory install
+          # -am on both. Without it these resolve only when the Maven cache
+          # happens to still hold the 8.0.5-SNAPSHOT artifacts another job
+          # built - which it does until a pom changes and the cache key with
+          # it. A job should not depend on that.
+          mvn -B -DskipTests -am -pl appserver/orb/orb-http-glassfish install
+          mvn -B -DskipTests -am -pl appserver/orb/orb-http-codec-fory install
 
       - name: Inject them into the server
         run: |
