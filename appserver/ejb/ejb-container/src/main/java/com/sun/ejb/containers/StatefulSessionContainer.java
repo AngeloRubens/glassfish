@@ -507,6 +507,65 @@ public final class StatefulSessionContainer extends BaseContainer implements Cac
         }
     }
 
+    /**
+     * Creates a session and returns its key, for transports that cannot hide
+     * one inside a reference.
+     * <p>
+     * This is the same sequence the home's create path follows - make the
+     * instance, give it its remote view, publish it - and then answers the
+     * question IIOP never has to ask: which key names this session. The key is
+     * the same one {@link #getEJBRemoteBusinessObjectImpl} resolves, so a
+     * client that sends it back reaches the very instance created here.
+     */
+    @Override
+    public byte[] createSession(String generatedRemoteBusinessIntf) throws CreateException, RemoteException {
+        try {
+            SessionContextImpl context = createBeanInstance();
+            if (generatedRemoteBusinessIntf == null) {
+                createEJBObjectImpl(context);
+            } else {
+                createRemoteBusinessObjectImpl(context);
+            }
+            afterInstanceCreation(context);
+            return uuidGenerator.keyToByteArray(context.getInstanceKey());
+        } catch (CreateException | RemoteException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            _logger.log(WARNING, CREATE_EJBOBJECT_EXCEPTION, new Object[] { ejbDescriptor.getName(), ex });
+            CreateException ce = new CreateException("ERROR creating stateful SessionBean");
+            ce.initCause(ex);
+            throw ce;
+        }
+    }
+
+    /**
+     * Discards a session, running its pre-destroy callback first.
+     * <p>
+     * A session that is already gone is not an error. A client whose removal
+     * timed out will send it again, and telling it that its own cleanup failed
+     * would invite it to keep trying to remove something that no longer exists.
+     */
+    @Override
+    public void removeSession(byte[] instanceKey) {
+        SessionContextImpl context = _getContextForInstance(instanceKey);
+        if (context == null) {
+            return;
+        }
+
+        EjbInvocation inv = super.createEjbInvocation(context.getEJB(), context);
+        context.setInEjbRemove(true);
+        try {
+            destroyBean(inv, context);
+        } catch (Throwable t) {
+            // Mirrors removeBean: a bean that fails its own pre-destroy still
+            // has to be destroyed, or the session leaks.
+            _logger.log(FINE, "exception thrown from SFSB PRE_DESTROY", t);
+        } finally {
+            context.setInEjbRemove(false);
+        }
+        forceDestroyBean(context);
+    }
+
     @Override
     protected EJBObjectImpl createRemoteBusinessObjectImpl() throws CreateException, RemoteException {
         try {

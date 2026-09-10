@@ -20,11 +20,15 @@ package org.glassfish.orb.http.glassfish;
 
 import com.sun.ejb.containers.EjbContainerUtil;
 import com.sun.ejb.containers.EjbContainerUtilImpl;
+import com.sun.enterprise.deployment.EjbDescriptor;
 
+import jakarta.ejb.CreateException;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 
 import java.rmi.Remote;
+import java.rmi.RemoteException;
+import java.util.Set;
 
 import org.glassfish.enterprise.iiop.spi.EjbContainerFacade;
 import org.glassfish.orb.http.protocol.EjbKey;
@@ -133,22 +137,57 @@ public class GlassFishContainerBridge implements ContainerBridge {
     @Override
     public byte[] createSession(String appName, String moduleName, String distinctName,
                                 String beanName) throws NoSuchTargetException {
-        // Not implemented, and not stubbed as a success.
-        //
-        // A stateful session is created through the bean's home:
-        // EJBHomeImpl.createEJBObjectImpl delegates to the container's
-        // protected createEJBObjectImpl(). For the EJB 2.x home view that is
-        // reachable by invoking create() on the home target. For the EJB 3
-        // business view it is not: GenericEJBHome carries only the
-        // asynchronous-result operations, and the session is created elsewhere
-        // in the lookup path. Until that route is established, answering
-        // anything here would hand the client a session id naming nothing.
-        throw new NoSuchTargetException("stateful session creation is not yet wired to this container");
+        EjbKey key = resolve(appName, moduleName, distinctName, beanName, null);
+        EjbContainerFacade facade = facade(key);
+        try {
+            return facade.createSession(remoteViewFor(facade));
+        } catch (CreateException | RemoteException e) {
+            // The container refuses this for anything that is not a stateful
+            // session bean, which is the honest answer: there is no
+            // conversation to start.
+            throw new NoSuchTargetException("cannot create a session for "
+                    + beanName + ": " + e.getMessage());
+        }
     }
 
     @Override
     public void removeSession(EjbKey key) throws NoSuchTargetException {
-        throw new NoSuchTargetException("stateful session removal is not yet wired to this container");
+        EjbContainerFacade facade = facade(key);
+        try {
+            facade.removeSession(key.instanceKey());
+        } catch (RemoteException e) {
+            throw new NoSuchTargetException("cannot remove session for " + key + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Chooses which remote view the session is created through.
+     *
+     * <p>A bean with an EJB 2.x remote interface is created through its home,
+     * which is what {@code null} selects. A bean with only business interfaces
+     * is created through one of them, and the container keys its view table by
+     * the generated name rather than the interface the application declared.
+     *
+     * @param facade the container being asked
+     * @return the generated business interface name, or {@code null} for the
+     *         remote home view
+     * @throws NoSuchTargetException if the bean has no remote view at all, in
+     *         which case there is nothing this transport can reach
+     */
+    private String remoteViewFor(EjbContainerFacade facade) throws NoSuchTargetException {
+        EjbDescriptor descriptor = facade.getEjbDescriptor();
+        if (descriptor.isRemoteInterfacesSupported()) {
+            return null;
+        }
+        Set<String> business = descriptor.getRemoteBusinessClassNames();
+        if (business == null || business.isEmpty()) {
+            throw new NoSuchTargetException(descriptor.getName()
+                    + " has no remote view, so it cannot be reached over this transport");
+        }
+        // Any of them creates the same instance - the view decides which
+        // interface the reference is typed as, not which bean is made - so
+        // when a bean has several, the first is as good as any.
+        return generatedViewName(business.iterator().next());
     }
 
     /**
