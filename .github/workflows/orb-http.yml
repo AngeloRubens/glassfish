@@ -176,7 +176,7 @@ jobs:
           set -euo pipefail
           # A plain jar in GlassFish's module directory exports nothing and is
           # invisible to the container. This has been wrong once already.
-          for m in orb-http-protocol orb-http-client orb-http-server orb-http-glassfish; do
+          for m in orb-http-protocol orb-http-client orb-http-server orb-http-glassfish orb-http-codec-fory; do
             jar=$(find ~/.m2/repository -name "$m-*.jar" ! -name '*sources*' | head -1)
             echo "-- $m"
             unzip -p "$jar" META-INF/MANIFEST.MF | grep -q 'Bundle-SymbolicName' \
@@ -219,6 +219,7 @@ jobs:
             -pl appserver/orb/orb-http-protocol,appserver/orb/orb-http-client,appserver/orb/orb-http-server \
             install
           mvn -B -DskipTests -pl appserver/orb/orb-http-glassfish install
+          mvn -B -DskipTests -pl appserver/orb/orb-http-codec-fory install
 
       - name: Inject them into the server
         run: |
@@ -227,7 +228,7 @@ jobs:
           # If OSGi refuses them on a version range this is where it shows,
           # and the answer would be to build the distribution from source
           # instead. Trying the cheap thing first, and saying so.
-          for m in orb-http-protocol orb-http-client orb-http-server orb-http-glassfish; do
+          for m in orb-http-protocol orb-http-client orb-http-server orb-http-glassfish orb-http-codec-fory; do
             jar=$(find ~/.m2/repository/org/glassfish/main/orb -name "$m-*.jar" ! -name '*sources*' | head -1)
             echo "installing $(basename "$jar")"
             cp "$jar" "$GLASSFISH_HOME/glassfish/modules/"
@@ -270,6 +271,35 @@ jobs:
           cp="$cp:$(find ~/.m2/repository/jakarta/ejb -name 'jakarta.ejb-api-*.jar' | head -1)"
           echo "classpath: $cp"
           java -cp "$cp" org.glassfish.orb.baseline.HttpBaseline
+
+      - name: Is the Fory codec discovered without the application asking?
+        run: |
+          set -euo pipefail
+          # Same client program, same bean, same call. The only difference is
+          # that the codec module is on the class path - no import, no code
+          # change. -Dcodec=fory makes the client require it, so a silent
+          # fallback to Java serialization fails the job instead of passing
+          # while proving nothing.
+          cp="ci/iiop-baseline/client-http/target/orb-baseline-client-http.jar"
+          cp="$cp:ci/iiop-baseline/client/target/orb-baseline-client.jar"
+          for m in orb-http-client orb-http-protocol orb-http-codec-fory; do
+            cp="$cp:$(find ~/.m2/repository/org/glassfish/main/orb -name "$m-*.jar" ! -name '*sources*' | head -1)"
+          done
+          cp="$cp:$(find ~/.m2/repository/jakarta/ejb -name 'jakarta.ejb-api-*.jar' | head -1)"
+          # The bundle carries fory and janino as nested jars, which a flat
+          # class path cannot read, so the client gets them directly.
+          for a in org/apache/fory/fory-core org/codehaus/janino/janino org/codehaus/janino/commons-compiler; do
+            cp="$cp:$(find ~/.m2/repository/$a -name '*.jar' ! -name '*sources*' | head -1)"
+          done
+          echo "classpath: $cp"
+          java -cp "$cp" -Dcodec=fory org.glassfish.orb.baseline.HttpBaseline
+
+      - name: Did the server actually load the codec bundle?
+        if: always()
+        run: |
+          grep -iE "fory|codec" \
+            "$GLASSFISH_HOME/glassfish/domains/domain1/logs/server.log" | tail -20 || \
+            echo "(nothing about the codec in the log)"
 
       - name: What the index saw, after the attempt
         if: always()
