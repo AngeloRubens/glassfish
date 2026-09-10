@@ -26,9 +26,18 @@ public final class HttpBaseline {
         environment.put(Context.PROVIDER_URL,
                 System.getProperty("endpoint", "http://localhost:8080/glassfish-services"));
 
+        // When a codec is named, require it. Without this the client would
+        // fall back to Java serialization if the server could not read the
+        // codec, and the run would pass while proving nothing.
+        String codec = System.getProperty("codec");
+        if (codec != null && !codec.isBlank()) {
+            environment.put("org.glassfish.orb.http.codec", codec);
+            System.out.println("requiring codec: " + codec);
+        }
+
         InitialContext context = new InitialContext(environment);
         try {
-            System.exit(Baseline.run(context, "HTTP") == 0 ? 0 : 1);
+            System.exit(Baseline.run(context, System.getProperty("codec") == null ? "HTTP" : "HTTP/" + System.getProperty("codec")) == 0 ? 0 : 1);
         } finally {
             context.close();
         }
