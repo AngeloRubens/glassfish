@@ -171,6 +171,12 @@ jobs:
         # and Grizzly, none of which exist as 8.0.5-SNAPSHOT until built.
         run: mvn -B -DskipTests -am -pl appserver/orb/orb-http-glassfish install
 
+      - name: Build the Fory codec module
+        # Depends only on orb-http-protocol, already installed above. Its tests
+        # run here: it is the one module whose correctness is a claim about a
+        # third-party library, so it should be checked where anyone can see it.
+        run: mvn -B -DskipTests=false -pl appserver/orb/orb-http-codec-fory install
+
       - name: Check the modules are OSGi bundles
         run: |
           set -euo pipefail
