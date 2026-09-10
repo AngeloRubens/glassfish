@@ -86,5 +86,9 @@ run_module() {
 
 run_module orb-http-protocol   org.glassfish.orb.http.protocol
 run_module orb-http-client     org.glassfish.orb.http.client
-run_module orb-http-server     org.glassfish.orb.http.server
+# The server module test-depends on the codec now: one of its tests drives a
+# full round trip through a codec that frames its own objects, which the
+# built-in one cannot exercise. Maven puts it on that module's test class path,
+# so this has to as well.
+run_module orb-http-server     org.glassfish.orb.http.server     "$out/fory"
 run_module orb-http-codec-fory org.glassfish.orb.http.codec.fory "$out/fory"
