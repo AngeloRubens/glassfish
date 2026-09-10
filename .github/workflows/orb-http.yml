@@ -283,6 +283,10 @@ jobs:
           java -cp "$cp" org.glassfish.orb.baseline.HttpBaseline
 
       - name: Is the Fory codec discovered without the application asking?
+        # always(): the step before fails on the one scenario that is known
+        # not to be implemented, and that must not decide whether the codec
+        # gets exercised. They are unrelated claims.
+        if: always()
         run: |
           set -euo pipefail
           # Same client program, same bean, same call. The only difference is
