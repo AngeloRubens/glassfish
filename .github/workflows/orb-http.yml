@@ -280,7 +280,17 @@ jobs:
           done
           cp="$cp:$(find ~/.m2/repository/jakarta/ejb -name 'jakarta.ejb-api-*.jar' | head -1)"
           echo "classpath: $cp"
-          java -cp "$cp" org.glassfish.orb.baseline.HttpBaseline
+          set +e
+          java -cp "$cp" org.glassfish.orb.baseline.HttpBaseline 2>&1 | tee /tmp/http.log
+          status=${PIPESTATUS[0]}
+          set -e
+          # Repeat the outcome as annotations. Job logs need a signed-in
+          # session to read; annotations do not, and without this the only
+          # thing visible from outside is "exit code 1".
+          grep -E "^ *(ok|FAIL)" /tmp/http.log | while read -r line; do
+            echo "::notice::jser: $line"
+          done
+          exit $status
 
       - name: Is the Fory codec discovered without the application asking?
         # always(): the step before fails on the one scenario that is known
@@ -306,7 +316,19 @@ jobs:
             cp="$cp:$(find ~/.m2/repository/$a -name '*.jar' ! -name '*sources*' | head -1)"
           done
           echo "classpath: $cp"
-          java -cp "$cp" -Dcodec=fory org.glassfish.orb.baseline.HttpBaseline
+          set +e
+          java -cp "$cp" -Dcodec=fory org.glassfish.orb.baseline.HttpBaseline 2>&1 | tee /tmp/fory.log
+          status=${PIPESTATUS[0]}
+          set -e
+          grep -E "^ *(ok|FAIL)|requiring codec" /tmp/fory.log | while read -r line; do
+            echo "::notice::fory: $line"
+          done
+          # The first exception line too: which codec failed and how is the
+          # whole question this step exists to answer.
+          grep -m3 -E "Exception|Caused by" /tmp/fory.log | while read -r line; do
+            echo "::error::fory: $line"
+          done
+          exit $status
 
       - name: Did the server actually load the codec bundle?
         if: always()
@@ -314,6 +336,11 @@ jobs:
           grep -iE "fory|codec" \
             "$GLASSFISH_HOME/glassfish/domains/domain1/logs/server.log" | tail -20 || \
             echo "(nothing about the codec in the log)"
+          # The scanner says what it found; that line is the answer to whether
+          # cross-bundle discovery worked, so put it where it can be read.
+          grep -h "codecs available\|registered the" \
+            "$GLASSFISH_HOME/glassfish/domains/domain1/logs/server.log" | tail -5 | \
+            while read -r line; do echo "::notice::server: $line"; done || true
 
       - name: What the index saw, after the attempt
         if: always()
