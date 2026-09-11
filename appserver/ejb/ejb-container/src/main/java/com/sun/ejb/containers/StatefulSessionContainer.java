@@ -519,6 +519,12 @@ public final class StatefulSessionContainer extends BaseContainer implements Cac
      */
     @Override
     public byte[] createSession(String generatedRemoteBusinessIntf) throws CreateException, RemoteException {
+        // The same bracket getTargetObject uses. Creating a session runs the
+        // bean's PostConstruct, which reads JNDI and expects the application's
+        // context class loader to be in place; called straight off a transport
+        // thread it is not, and the failure arrives as a bare EJBException
+        // from afterInstanceCreation with nothing in it to act on.
+        externalPreInvoke();
         try {
             SessionContextImpl context = createBeanInstance();
             if (generatedRemoteBusinessIntf == null) {
@@ -539,6 +545,8 @@ public final class StatefulSessionContainer extends BaseContainer implements Cac
             CreateException ce = new CreateException("ERROR creating stateful SessionBean: " + ex);
             ce.initCause(ex);
             throw ce;
+        } finally {
+            externalPostInvoke();
         }
     }
 
