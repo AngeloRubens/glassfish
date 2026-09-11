@@ -92,12 +92,24 @@ final class GrizzlyServerExchange implements ServerExchange {
         }
         response.setContentLengthLong(total);
 
-        // Grizzly can take the marshalled chunks as they are. This is where
-        // ChunkedOutput's refusal to flatten itself into one array finally
-        // pays: the reply reaches the socket without being copied again.
+        // ChunkedOutput hands out read-only views of its chunks, and a
+        // read-only ByteBuffer reports hasArray() false and refuses array().
+        // Grizzly's wrap has to take some other path for those, and a reply
+        // shorter than the Content-Length just promised leaves the client
+        // waiting for bytes that never arrive - which is what the JDK's HTTP
+        // client reports as "EOF reached while reading".
+        //
+        // So anything that will not show its array is copied into one that
+        // will. That is a copy this class was written to avoid, and it is
+        // taken only for the buffers that need it.
         for (ByteBuffer buffer : body) {
+            ByteBuffer writable = buffer;
+            if (!buffer.hasArray()) {
+                writable = ByteBuffer.allocate(buffer.remaining());
+                writable.put(buffer.duplicate()).flip();
+            }
             response.getNIOOutputStream().write(
-                    Buffers.wrap(response.getRequest().getContext().getMemoryManager(), buffer));
+                    Buffers.wrap(response.getRequest().getContext().getMemoryManager(), writable));
         }
         response.getNIOOutputStream().flush();
     }
