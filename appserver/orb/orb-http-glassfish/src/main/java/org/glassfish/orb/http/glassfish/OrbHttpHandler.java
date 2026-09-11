@@ -27,6 +27,7 @@ import org.glassfish.orb.http.protocol.Protocol;
 import org.glassfish.orb.http.server.AffinityDispatcher;
 import org.glassfish.orb.http.server.EjbDispatcher;
 import org.glassfish.orb.http.server.NamingDispatcher;
+import org.glassfish.orb.http.server.TransactionDispatcher;
 
 /**
  * The endpoint: one Grizzly handler in front of the three dispatchers.
@@ -41,11 +42,14 @@ final class OrbHttpHandler extends HttpHandler {
 
     private final EjbDispatcher ejb;
     private final NamingDispatcher naming;
+    private final TransactionDispatcher transactions;
     private final AffinityDispatcher affinity;
 
-    OrbHttpHandler(EjbDispatcher ejb, NamingDispatcher naming, AffinityDispatcher affinity) {
+    OrbHttpHandler(EjbDispatcher ejb, NamingDispatcher naming,
+                   TransactionDispatcher transactions, AffinityDispatcher affinity) {
         this.ejb = ejb;
         this.naming = naming;
+        this.transactions = transactions;
         this.affinity = affinity;
     }
 
@@ -56,6 +60,8 @@ final class OrbHttpHandler extends HttpHandler {
         try {
             if (path.contains('/' + Protocol.SVC_NAMING + '/')) {
                 naming.dispatch(exchange);
+            } else if (path.contains('/' + Protocol.SVC_TXN + '/')) {
+                transactions.dispatch(exchange);
             } else if (path.contains('/' + Protocol.SVC_COMMON + '/')) {
                 affinity.dispatch(exchange);
             } else {

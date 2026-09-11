@@ -34,6 +34,7 @@ import org.glassfish.orb.http.server.EjbDispatcher;
 import org.glassfish.orb.http.server.InvocationRegistry;
 import org.glassfish.orb.http.server.NamingDispatcher;
 import org.glassfish.orb.http.server.SessionAffinity;
+import org.glassfish.orb.http.server.TransactionDispatcher;
 import org.jvnet.hk2.annotations.Service;
 
 /**
@@ -69,6 +70,9 @@ public class OrbHttpEndpoint implements PostConstruct {
     @Inject
     private GlassFishSecurityBridge security;
 
+    @Inject
+    private GlassFishTransactionBridge transactions;
+
     @Override
     public void postConstruct() {
         // Before the dispatchers are built, so their defaults are chosen from
@@ -77,10 +81,12 @@ public class OrbHttpEndpoint implements PostConstruct {
         OsgiCodecScanner.scanAndRegister();
 
         SessionAffinity affinity = SessionAffinity.forThisNode();
-        EjbDispatcher ejb = new EjbDispatcher(container, security,
+        EjbDispatcher ejb = new EjbDispatcher(container, security, transactions,
                 new JavaSerializationMarshaller(), new InvocationRegistry(), affinity);
-        OrbHttpHandler handler = new OrbHttpHandler(ejb, new NamingDispatcher(naming, security,
-                new JavaSerializationMarshaller()), new AffinityDispatcher(affinity));
+        OrbHttpHandler handler = new OrbHttpHandler(ejb,
+                new NamingDispatcher(naming, security, new JavaSerializationMarshaller()),
+                new TransactionDispatcher(transactions, security),
+                new AffinityDispatcher(affinity));
         try {
             grizzly.registerEndpoint(Protocol.CONTEXT_PATH, handler, null);
             LOG.log(Level.INFO, "Remote EJB and JNDI over HTTP mounted at {0}", Protocol.CONTEXT_PATH);
