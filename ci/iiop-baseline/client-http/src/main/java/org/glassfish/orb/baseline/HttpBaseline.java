@@ -111,15 +111,26 @@ public final class HttpBaseline {
 
         failures += check("a bean marking rollback-only is refused a commit", () -> {
             transaction.begin();
-            boolean refused = false;
+            probe.markRollbackOnly();
+
+            // Reported rather than assumed. Two outcomes are defensible - the
+            // commit is refused, or the container has already rolled the
+            // transaction back and there is nothing left to refuse - and only
+            // one is a fault: the work being committed. Saying which happened
+            // is the difference between a diagnosis and another guess.
+            String outcome;
             try {
-                probe.markRollbackOnly();
                 transaction.commit();
+                outcome = "committed, status after = " + transaction.getStatus();
             } catch (RollbackException e) {
-                refused = true;
+                outcome = "refused";
+            } catch (Exception e) {
+                outcome = e.getClass().getSimpleName() + ": " + e.getMessage();
             }
-            if (!refused) {
-                throw new IllegalStateException("a transaction the bean marked was committed anyway");
+            System.out.println("        rollback-only commit -> " + outcome);
+
+            if (!"refused".equals(outcome)) {
+                throw new IllegalStateException("the commit was not refused: " + outcome);
             }
         });
 

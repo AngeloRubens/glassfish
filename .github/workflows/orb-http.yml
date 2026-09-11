@@ -58,13 +58,21 @@ jobs:
             mvn -q dependency:get -Dartifact=jakarta.ejb:jakarta.ejb-api:4.0.1
             EJB=$(find ~/.m2 -name 'jakarta.ejb-api-*.jar' | head -1)
           fi
+          # The client carries transactions now, so this needs the API they are
+          # written against. Without it the step fails on missing classes and
+          # reports it as a compilation error, which reads like a code fault.
+          TX=$(find ~/.m2 -name 'jakarta.transaction-api-*.jar' | head -1 || true)
+          if [ -z "$TX" ]; then
+            mvn -q dependency:get -Dartifact=jakarta.transaction:jakarta.transaction-api:2.0.1
+            TX=$(find ~/.m2 -name 'jakarta.transaction-api-*.jar' | head -1)
+          fi
           javac -Werror -Xlint:all -d /tmp/out/protocol \
             $(find appserver/orb/orb-http-protocol/src/main/java -name '*.java')
-          javac -Werror -Xlint:all -cp "/tmp/out/protocol:$EJB" -d /tmp/out/client \
+          javac -Werror -Xlint:all -cp "/tmp/out/protocol:$EJB:$TX" -d /tmp/out/client \
             $(find appserver/orb/orb-http-client/src/main/java -name '*.java')
           # The server module needs jakarta.ejb too: applying the Enterprise
           # Beans exception contract means knowing what EJBException is.
-          javac -Werror -Xlint:all -cp "/tmp/out/protocol:$EJB" -d /tmp/out/server \
+          javac -Werror -Xlint:all -cp "/tmp/out/protocol:$EJB:$TX" -d /tmp/out/server \
             $(find appserver/orb/orb-http-server/src/main/java -name '*.java')
 
       - name: Checkstyle, with the project's own configuration
@@ -317,7 +325,7 @@ jobs:
           # Repeat the outcome as annotations. Job logs need a signed-in
           # session to read; annotations do not, and without this the only
           # thing visible from outside is "exit code 1".
-          grep -E "^ *(ok|FAIL)" /tmp/http.log | while read -r line; do
+          grep -E "^ *(ok|FAIL)|rollback-only commit" /tmp/http.log | while read -r line; do
             echo "::notice::jser: $line"
           done
           exit $status
@@ -351,7 +359,7 @@ jobs:
           java -cp "$cp" -Dcodec=fory org.glassfish.orb.baseline.HttpBaseline 2>&1 | tee /tmp/fory.log
           status=${PIPESTATUS[0]}
           set -e
-          grep -E "^ *(ok|FAIL)|requiring codec" /tmp/fory.log | while read -r line; do
+          grep -E "^ *(ok|FAIL)|requiring codec|rollback-only commit" /tmp/fory.log | while read -r line; do
             echo "::notice::fory: $line"
           done
           # The first exception line too: which codec failed and how is the
