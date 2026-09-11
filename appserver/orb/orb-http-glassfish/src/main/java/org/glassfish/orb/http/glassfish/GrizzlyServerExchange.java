@@ -117,21 +117,19 @@ final class GrizzlyServerExchange implements ServerExchange {
     /**
      * {@inheritDoc}
      *
-     * <p>Always null, deliberately.
+     * <p>The credential is checked against the server's realm before the
+     * identity is believed - reading a name out of the header and passing it
+     * on would let any caller assert any identity.
      *
-     * <p>An {@code Authorization: Basic} header names a user; it does not
-     * establish that the request came from them. Reading the name out of it and
-     * handing that to {@link org.glassfish.orb.http.server.SecurityBridge}
-     * would let any caller assert any identity, which is not a weaker
-     * authentication than IIOP's - it is none at all, wearing the shape of one.
+     * <p>A request with no credential is anonymous, which is what an unsecured
+     * bean expects. A request whose credential fails is refused rather than
+     * downgraded to anonymous: proceeding with fewer rights than were asked
+     * for is still an authorization decision taken on a credential nobody
+     * accepted.
      *
-     * <p>Doing this properly means validating the credential against the
-     * server's realm before the identity is believed. Until that is wired,
-     * refusing to produce an identity is the only safe answer, and invocations
-     * run unauthenticated.
+     * @throws SecurityException if a credential is present and does not pass
      */
-    @Override
     public String authenticatedUser() {
-        return null;
+        return RealmAuthenticator.authenticate(requestHeader("Authorization"));
     }
 }

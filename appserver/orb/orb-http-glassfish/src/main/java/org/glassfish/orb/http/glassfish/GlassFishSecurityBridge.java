@@ -51,7 +51,13 @@ public class GlassFishSecurityBridge implements SecurityBridge {
             // installing an empty identity over it.
             return previous;
         }
-        SecurityContext.setCurrent(new SecurityContext(userName, new Subject()));
+        // The subject the realm produced, not an empty one: it carries the
+        // groups the caller belongs to, and every authorization decision the
+        // container makes afterwards reads them from here. An empty subject
+        // would authenticate the caller and then deny it everything it is
+        // entitled to.
+        Subject subject = RealmAuthenticator.authenticatedSubject();
+        SecurityContext.setCurrent(new SecurityContext(userName, subject == null ? new Subject() : subject));
         return previous;
     }
 
@@ -60,5 +66,6 @@ public class GlassFishSecurityBridge implements SecurityBridge {
         // Restore rather than null out: this thread came from a pool and may
         // have been carrying an identity that is not ours to discard.
         SecurityContext.setCurrent(token instanceof SecurityContext previous ? previous : null);
+        RealmAuthenticator.clear();
     }
 }
