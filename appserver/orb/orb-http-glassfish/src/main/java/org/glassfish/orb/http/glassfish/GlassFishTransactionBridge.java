@@ -23,6 +23,8 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.resource.spi.XATerminator;
 
+import java.lang.System.Logger;
+import java.lang.System.Logger.Level;
 import java.nio.ByteBuffer;
 import java.security.SecureRandom;
 import java.util.concurrent.atomic.AtomicLong;
@@ -60,6 +62,8 @@ public class GlassFishTransactionBridge implements TransactionBridge {
      */
     private static final int FORMAT_ID = 0x4F524248;
 
+    private static final Logger LOG = System.getLogger(GlassFishTransactionBridge.class.getName());
+
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final AtomicLong sequence = new AtomicLong();
@@ -82,6 +86,30 @@ public class GlassFishTransactionBridge implements TransactionBridge {
             transactions.release(xid);
         } catch (Exception e) {
             throw failure("cannot release " + Xids.key(xid), XAException.XAER_RMERR, e);
+        } finally {
+            detach();
+        }
+    }
+
+    /**
+     * Leaves the thread with no transaction on it, whatever happened above.
+     *
+     * <p>A release can fail - a branch the bean marked for rollback is the
+     * ordinary case - and the caller logs that and carries on, because the
+     * invocation's own outcome has already been decided. What must not carry
+     * on is the association: these are pooled request threads, and one still
+     * holding an aborted transaction fails the next request to land on it,
+     * with an error about a transaction that request never started. That is a
+     * failure in one call reappearing as a failure in an unrelated one, which
+     * is the hardest kind to trace back.
+     */
+    private void detach() {
+        try {
+            transactions.suspend();
+        } catch (Exception e) {
+            // Nothing further to try, and throwing here would replace the real
+            // failure with this one.
+            LOG.log(Level.WARNING, "could not detach the transaction from this thread", e);
         }
     }
 
