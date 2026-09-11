@@ -532,7 +532,11 @@ public final class StatefulSessionContainer extends BaseContainer implements Cac
             throw ex;
         } catch (Exception ex) {
             _logger.log(WARNING, CREATE_EJBOBJECT_EXCEPTION, new Object[] { ejbDescriptor.getName(), ex });
-            CreateException ce = new CreateException("ERROR creating stateful SessionBean");
+            // The cause is named in the message as well as chained: a remote
+            // caller sees the message and not the chain, and "ERROR creating
+            // stateful SessionBean" on its own says only that this method was
+            // reached.
+            CreateException ce = new CreateException("ERROR creating stateful SessionBean: " + ex);
             ce.initCause(ex);
             throw ce;
         }
