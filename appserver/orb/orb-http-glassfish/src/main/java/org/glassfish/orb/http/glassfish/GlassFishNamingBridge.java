@@ -18,6 +18,7 @@ package org.glassfish.orb.http.glassfish;
 
 
 
+import com.sun.ejb.containers.EjbContainerUtilImpl;
 import com.sun.enterprise.naming.impl.ProviderManager;
 import com.sun.enterprise.naming.impl.SerialContextProvider;
 
@@ -29,6 +30,7 @@ import java.util.Map;
 
 import javax.naming.NamingException;
 
+import org.glassfish.enterprise.iiop.spi.EjbContainerFacade;
 import org.glassfish.orb.http.protocol.RemoteEjbReference;
 import org.glassfish.orb.http.server.NamingBridge;
 import org.jvnet.hk2.annotations.Service;
@@ -96,7 +98,7 @@ public class GlassFishNamingBridge implements NamingBridge {
      * @return a reference the client can turn into a proxy, or null if this is
      *         not a remote bean
      */
-    private RemoteEjbReference asEjbReference(String name) {
+    private RemoteEjbReference asEjbReference(String name) throws NamingException {
         if (name == null || !name.startsWith(GLOBAL)) {
             return null;
         }
@@ -126,13 +128,48 @@ public class GlassFishNamingBridge implements NamingBridge {
             return null;
         }
 
-        if (viewClassName == null || index.lookup(appName, moduleName, beanName) == null) {
+        Long ejbId = index.lookup(appName, moduleName, beanName);
+        if (viewClassName == null || ejbId == null) {
             // Either the client did not say which view it wants - and a bean
             // with several remote interfaces cannot be guessed at - or there is
             // no such bean deployed. Let the namespace answer.
             return null;
         }
-        return new RemoteEjbReference(appName, moduleName, null, beanName, viewClassName, null);
+        return new RemoteEjbReference(appName, moduleName, null, beanName, viewClassName,
+                openSessionIfStateful(ejbId, viewClassName, name));
+    }
+
+    /**
+     * Starts a conversation when the bean has one to start.
+     *
+     * <p>Looking up a stateful bean is what creates its session - two lookups
+     * of the same name are two conversations, which is what an application
+     * written against the EJB semantics expects and what an IIOP client gets.
+     * The session is carried back inside the reference, so the proxy the client
+     * builds is already addressed to its own instance.
+     *
+     * <p>For anything else this returns null, and the reference names the
+     * single instance the container publishes.
+     *
+     * @param ejbId the bean being looked up
+     * @param viewClassName the interface the client named
+     * @param name the JNDI name, for the error if the session cannot be made
+     * @return the new session's key, or null if this bean is not stateful
+     * @throws NamingException if the bean is stateful and the session could
+     *         not be created - a reference without one would reach the
+     *         container and fail there, unrecognisably
+     */
+    private byte[] openSessionIfStateful(long ejbId, String viewClassName, String name)
+            throws NamingException {
+        if (!GlassFishContainerBridge.isStateful(ejbId)) {
+            return null;
+        }
+        try {
+            EjbContainerFacade facade = EjbContainerUtilImpl.getInstance().getContainer(ejbId);
+            return facade.createSession(GlassFishContainerBridge.generatedViewName(viewClassName));
+        } catch (Exception e) {
+            throw asNamingException("open a session for", name, e);
+        }
     }
 
     @Override
@@ -213,3 +250,4 @@ public class GlassFishNamingBridge implements NamingBridge {
         return e;
     }
 }
+

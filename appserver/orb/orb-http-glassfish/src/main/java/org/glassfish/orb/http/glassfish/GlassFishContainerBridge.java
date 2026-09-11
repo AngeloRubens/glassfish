@@ -21,6 +21,7 @@ package org.glassfish.orb.http.glassfish;
 import com.sun.ejb.containers.EjbContainerUtil;
 import com.sun.ejb.containers.EjbContainerUtilImpl;
 import com.sun.enterprise.deployment.EjbDescriptor;
+import com.sun.enterprise.deployment.EjbSessionDescriptor;
 
 import jakarta.ejb.CreateException;
 import jakarta.inject.Inject;
@@ -99,9 +100,20 @@ public class GlassFishContainerBridge implements ContainerBridge {
             throw new NoSuchTargetException("no bean " + beanName
                     + " in " + appName + '/' + moduleName);
         }
-        // A stateful conversation names its own instance; everything else
-        // shares the one reference the container publishes for the bean.
-        return new EjbKey(ejbId, sessionId == null ? SHARED_INSTANCE_KEY : sessionId);
+        if (sessionId != null) {
+            return new EjbKey(ejbId, sessionId);
+        }
+        if (isStateful(ejbId)) {
+            // The shared key is four bytes that mean "the one instance". A
+            // stateful container reads an instance key as a session key and
+            // runs off the end of it, which surfaces as an
+            // ArrayIndexOutOfBoundsException from inside the container rather
+            // than as anything a caller could act on.
+            throw new NoSuchTargetException(beanName
+                    + " is stateful: this call needs a session, and none was named");
+        }
+        // Everything else shares the one reference the container publishes.
+        return new EjbKey(ejbId, SHARED_INSTANCE_KEY);
     }
 
     @Override
@@ -196,7 +208,7 @@ public class GlassFishContainerBridge implements ContainerBridge {
      * @return the generated interface name the container's view table is keyed
      *         by, or null to select the home view
      */
-    private static String generatedViewName(String viewClassName) throws NoSuchTargetException {
+    static String generatedViewName(String viewClassName) throws NoSuchTargetException {
         if (viewClassName == null) {
             return null;
         }
@@ -206,6 +218,17 @@ public class GlassFishContainerBridge implements ContainerBridge {
             throw new NoSuchTargetException("cannot derive the generated interface for "
                     + viewClassName + ": " + e);
         }
+    }
+
+    /**
+     * @param ejbId the bean to ask about
+     * @return whether its container keeps a conversation per client
+     */
+    static boolean isStateful(long ejbId) {
+        EjbContainerFacade facade = util().getContainer(ejbId);
+        return facade != null
+                && facade.getEjbDescriptor() instanceof EjbSessionDescriptor session
+                && session.isStateful();
     }
 
     private EjbContainerFacade facade(EjbKey key) throws NoSuchTargetException {
