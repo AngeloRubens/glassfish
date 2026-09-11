@@ -9,9 +9,14 @@ import java.util.Hashtable;
 import javax.naming.Context;
 import javax.naming.InitialContext;
 
+import javax.transaction.xa.XAResource;
+import javax.transaction.xa.Xid;
+
 import org.glassfish.orb.http.client.ClientConfiguration;
 import org.glassfish.orb.http.client.HttpUserTransaction;
+import org.glassfish.orb.http.client.HttpXAResource;
 import org.glassfish.orb.http.client.JdkHttpTransport;
+import org.glassfish.orb.http.protocol.Xids;
 
 /**
  * The same baseline over HTTP, and the whole argument in one file.
@@ -118,8 +123,77 @@ public final class HttpBaseline {
             }
         });
 
+        failures += xaBranch(probe, environment);
+
         System.out.println();
         return failures;
+    }
+
+    /**
+     * The other family: this server as one branch of somebody else's
+     * transaction.
+     *
+     * <p>The UserTransaction cases above have the client asking the server to
+     * begin and end a transaction. Here the coordinator is outside and the
+     * server is a resource it drives - start, do work, end, prepare, commit -
+     * which is the case an application server makes when it calls another one.
+     * The xid is invented here, as a coordinator invents it, and the server
+     * meets it for the first time on the invocation.
+     */
+    private static int xaBranch(TxProbe probe, Hashtable<String, String> environment) {
+        int failures = 0;
+        URI base = URI.create(environment.get(Context.PROVIDER_URL));
+        ClientConfiguration config = ClientConfiguration.builder(base).build();
+
+        failures += check("a branch driven from outside commits in two phases", () -> {
+            HttpXAResource resource = new HttpXAResource(config, new JdkHttpTransport(config));
+            Xid xid = branch(1);
+
+            resource.start(xid, XAResource.TMNOFLAGS);
+            String key = probe.transactionKey();
+            resource.end(xid, XAResource.TMSUCCESS);
+
+            expectNotNull(key, "the coordinator's branch did not reach the bean");
+
+            int vote = resource.prepare(xid);
+            if (vote != XAResource.XA_OK && vote != XAResource.XA_RDONLY) {
+                throw new IllegalStateException("unexpected vote: " + vote);
+            }
+            if (vote == XAResource.XA_OK) {
+                resource.commit(xid, false);
+            }
+        });
+
+        failures += check("a branch driven from outside can be rolled back", () -> {
+            HttpXAResource resource = new HttpXAResource(config, new JdkHttpTransport(config));
+            Xid xid = branch(2);
+
+            resource.start(xid, XAResource.TMNOFLAGS);
+            expectNotNull(probe.transactionKey(), "the coordinator's branch did not reach the bean");
+            resource.end(xid, XAResource.TMSUCCESS);
+            resource.rollback(xid);
+
+            expectNull(probe.transactionKey());
+        });
+
+        failures += check("the server answers a recovery scan", () -> {
+            // Not about finding anything - an idle server has nothing in
+            // doubt. It is about the operation being reachable and answering,
+            // which is what a coordinator needs after a crash.
+            HttpXAResource resource = new HttpXAResource(config, new JdkHttpTransport(config));
+            Xid[] inDoubt = resource.recover(XAResource.TMSTARTRSCAN);
+            resource.recover(XAResource.TMENDRSCAN);
+            if (inDoubt == null) {
+                throw new IllegalStateException("recovery returned null rather than an empty scan");
+            }
+        });
+
+        return failures;
+    }
+
+    private static Xid branch(int n) {
+        return new Xids.SimpleXid(0x42415345,
+                new byte[] { 'b', 'a', 's', 'e', (byte) n }, new byte[] { (byte) n });
     }
 
     private static UserTransaction userTransaction(Hashtable<String, String> environment) {
