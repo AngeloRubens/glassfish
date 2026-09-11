@@ -297,6 +297,8 @@ jobs:
             cp="$cp:$(find ~/.m2/repository/org/glassfish/main/orb -name "$m-*.jar" ! -name '*sources*' | head -1)"
           done
           cp="$cp:$(find ~/.m2/repository/jakarta/ejb -name 'jakarta.ejb-api-*.jar' | head -1)"
+          # The transaction scenario drives a UserTransaction from the client.
+          cp="$cp:$(find ~/.m2/repository/jakarta/transaction -name 'jakarta.transaction-api-*.jar' | head -1)"
           echo "classpath: $cp"
           set +e
           java -cp "$cp" org.glassfish.orb.baseline.HttpBaseline 2>&1 | tee /tmp/http.log
@@ -328,6 +330,7 @@ jobs:
             cp="$cp:$(find ~/.m2/repository/org/glassfish/main/orb -name "$m-*.jar" ! -name '*sources*' | head -1)"
           done
           cp="$cp:$(find ~/.m2/repository/jakarta/ejb -name 'jakarta.ejb-api-*.jar' | head -1)"
+          cp="$cp:$(find ~/.m2/repository/jakarta/transaction -name 'jakarta.transaction-api-*.jar' | head -1)"
           # The bundle carries fory and janino as nested jars, which a flat
           # class path cannot read, so the client gets them directly.
           for a in org/apache/fory/fory-core org/codehaus/janino/janino org/codehaus/janino/commons-compiler; do
