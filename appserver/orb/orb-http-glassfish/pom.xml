@@ -83,6 +83,16 @@
         <!-- The endpoint mounts on the server's own HTTP listeners, which is
              what gives it their TLS configuration and their HTTP/2 settings
              without arranging either. -->
+        <!--
+            Read only, and provided: the scanner asks the framework which
+            modules are installed. The server supplies this at runtime, so it
+            must not be bundled.
+        -->
+        <dependency>
+            <groupId>org.osgi</groupId>
+            <artifactId>osgi.core</artifactId>
+            <scope>provided</scope>
+        </dependency>
         <dependency>
             <groupId>org.glassfish.main.core</groupId>
             <artifactId>kernel</artifactId>
