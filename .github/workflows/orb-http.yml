@@ -244,6 +244,24 @@ jobs:
             cp "$jar" "$GLASSFISH_HOME/glassfish/modules/"
           done
 
+          # The transport also extends GlassFish's own SPI - EjbContainerFacade
+          # gained createSession, and the stateful container implements it - so
+          # the released 8.0.4 copies of those two modules have to be replaced
+          # as well. Without this the server runs the stock interface and the
+          # adapter calls a method that is not there: NoSuchMethodError, at the
+          # first stateful lookup.
+          for m in orb-connector ejb-container; do
+            jar=$(find ~/.m2/repository/org/glassfish/main -name "$m-8.0.5-SNAPSHOT.jar" ! -name '*sources*' | head -1)
+            target=$(find "$GLASSFISH_HOME/glassfish/modules" -name "$m.jar" | head -1)
+            if [ -n "$jar" ] && [ -n "$target" ]; then
+              echo "replacing $(basename "$target") with $(basename "$jar")"
+              cp "$jar" "$target"
+            else
+              echo "::error::could not replace $m (built=$jar target=$target)"
+              exit 1
+            fi
+          done
+
       - name: Start the domain and deploy the bean
         run: |
           set -euo pipefail
