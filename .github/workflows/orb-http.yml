@@ -391,7 +391,7 @@ jobs:
           # What the manager reported about a branch. Either this line appears
           # and the listener works, or it does not and the approach is wrong -
           # one run says which.
-          grep -hE "ended rolled back" \
+          grep -hE "ended rolled back|status before commit" \
             "$GLASSFISH_HOME/glassfish/domains/domain1/logs/server.log" | tail -4 | \
             while read -r line; do echo "::error::outcome: ${line:0:200}"; done || true
           grep -hiE "rollback|transaction|xid|XATerminator" \
