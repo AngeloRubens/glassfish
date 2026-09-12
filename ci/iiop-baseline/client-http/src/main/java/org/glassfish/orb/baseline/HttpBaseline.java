@@ -135,7 +135,81 @@ public final class HttpBaseline {
         });
 
         failures += attributes(probe, transaction);
+        failures += acrossTwoServers(context, transaction);
         failures += xaBranch(probe, environment);
+
+        System.out.println();
+        return failures;
+    }
+
+    /**
+     * A client calls a bean here, and that bean calls a bean over there.
+     *
+     * <p>This is the case two application servers make when they talk to each
+     * other, and the whole point of the transport: the second hop is HTTP as
+     * well, made by a bean that names a factory and a URL and nothing else.
+     *
+     * <p>What is not asserted is that both servers report the same transaction
+     * key. They cannot: a key is a local object in its own JVM, and two of them
+     * would differ for a single global transaction as surely as for two. The
+     * evidence that this is one unit of work is elsewhere - a rollback decided
+     * on the far server reaching the client's commit, two hops back.
+     */
+    private static int acrossTwoServers(InitialContext context, UserTransaction transaction) {
+        System.out.println();
+        System.out.println("== across two servers ==");
+        int failures = 0;
+
+        Relay relay;
+        try {
+            relay = (Relay) context.lookup(
+                    "java:global/orb-baseline-relay/RelayBean!" + Relay.class.getName());
+        } catch (Exception e) {
+            System.out.println("  SKIP  the relay is not deployed -- " + e);
+            return 0;
+        }
+
+        failures += check("the caller's transaction reaches the second server", () -> {
+            transaction.begin();
+            try {
+                String both = relay.bothTransactions();
+                String[] hops = both.split("\\|", -1);
+                if (hops.length != 2) {
+                    throw new IllegalStateException("unreadable answer: " + both);
+                }
+                if ("none".equals(hops[0])) {
+                    throw new IllegalStateException("the first server was not in a transaction");
+                }
+                if (hops[1] == null || hops[1].isEmpty() || "null".equals(hops[1])) {
+                    throw new IllegalStateException(
+                            "the second server ran outside a transaction: " + both);
+                }
+                System.out.println("        first=" + hops[0] + " second=" + hops[1]);
+            } finally {
+                transaction.commit();
+            }
+        });
+
+        failures += check("a rollback decided on the second server reaches the client", () -> {
+            transaction.begin();
+            boolean refused = false;
+            try {
+                relay.markRollbackOnlyRemotely();
+                transaction.commit();
+            } catch (RollbackException e) {
+                refused = true;
+            }
+            if (!refused) {
+                // The decision was taken two servers away from the commit.
+                // Accepting it would tell the client its work is durable when
+                // the far server has already refused it.
+                throw new IllegalStateException("a transaction the far server marked was committed");
+            }
+        });
+
+        failures += check("with no transaction, the second hop runs without one either", () -> {
+            expectNull(relay.remoteTransaction());
+        });
 
         System.out.println();
         return failures;
