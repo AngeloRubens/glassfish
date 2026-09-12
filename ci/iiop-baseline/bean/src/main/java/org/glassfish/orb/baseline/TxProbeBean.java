@@ -26,13 +26,57 @@ public class TxProbeBean implements TxProbe {
     @Override
     @TransactionAttribute(TransactionAttributeType.SUPPORTS)
     public String transactionKey() {
-        Object key = registry == null ? null : registry.getTransactionKey();
-        return key == null ? null : key.toString();
+        return key();
     }
 
     @Override
     @TransactionAttribute(TransactionAttributeType.MANDATORY)
     public void markRollbackOnly() {
         registry.setRollbackOnly();
+    }
+
+    // Every one of these returns the same thing - the transaction it is
+    // running in - so any difference between them is the attribute doing its
+    // work, not the method.
+
+    @Override
+    @TransactionAttribute(TransactionAttributeType.REQUIRED)
+    public String required() {
+        return key();
+    }
+
+    @Override
+    @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
+    public String requiresNew() {
+        return key();
+    }
+
+    @Override
+    @TransactionAttribute(TransactionAttributeType.MANDATORY)
+    public String mandatory() {
+        return key();
+    }
+
+    @Override
+    @TransactionAttribute(TransactionAttributeType.SUPPORTS)
+    public String supports() {
+        return key();
+    }
+
+    @Override
+    @TransactionAttribute(TransactionAttributeType.NOT_SUPPORTED)
+    public String notSupported() {
+        return key();
+    }
+
+    @Override
+    @TransactionAttribute(TransactionAttributeType.NEVER)
+    public String never() {
+        return key();
+    }
+
+    private String key() {
+        Object key = registry == null ? null : registry.getTransactionKey();
+        return key == null ? null : key.toString();
     }
 }
