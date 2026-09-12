@@ -388,9 +388,6 @@ jobs:
             while read -r line; do echo "::error::server: ${line:0:400}"; done || true
           # Anything the transaction machinery said. A commit that should have
           # been refused and was not leaves its account here and nowhere else.
-          grep -hE "txn mark for" \
-            "$GLASSFISH_HOME/glassfish/domains/domain1/logs/server.log" | tail -6 | \
-            while read -r line; do echo "::error::mark: ${line:0:200}"; done || true
           grep -hiE "rollback|transaction|xid|XATerminator" \
             "$GLASSFISH_HOME/glassfish/domains/domain1/logs/server.log" | tail -12 | \
             while read -r line; do echo "::notice::txn: ${line:0:300}"; done || true
