@@ -14,16 +14,21 @@ import jakarta.ejb.Remote;
 public interface Relay {
 
     /**
-     * Calls the far bean and reports both transactions.
+     * Calls the far bean and reports what happened.
      *
-     * @return "here|there" - this server's transaction key and the far
-     *         server's, so the caller can see whether they are the same one
+     * <p>Answers rather than throws, and that is deliberate. An exception from
+     * two servers away arrives at the client as whatever survived being
+     * serialised twice - in practice "detail could not be decoded", which
+     * names nothing. A string crosses intact and says what went wrong.
+     *
+     * @return "here|there" with both transaction keys, or a line beginning
+     *         with ERROR describing what stopped the second hop
      */
     String bothTransactions();
 
-    /** Has the far bean mark the transaction for rollback. */
-    void markRollbackOnlyRemotely();
+    /** @return "ok", or a line beginning with ERROR */
+    String markRollbackOnlyRemotely();
 
-    /** @return the far server's transaction key alone, or null */
+    /** @return the far server's transaction key, "none", or an ERROR line */
     String remoteTransaction();
 }
