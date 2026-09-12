@@ -22,7 +22,6 @@ import com.sun.enterprise.transaction.api.JavaEETransactionManager;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.resource.spi.XATerminator;
-import jakarta.transaction.Status;
 
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
@@ -89,27 +88,6 @@ public class GlassFishTransactionBridge implements TransactionBridge {
             throw failure("cannot release " + Xids.key(xid), XAException.XAER_RMERR, e);
         } finally {
             detach();
-        }
-    }
-
-    /**
-     * {@inheritDoc}
-     *
-     * <p>Read from the thread, which is where the branch still is when this is
-     * asked. A bean that called {@code setRollbackOnly} has marked the very
-     * transaction the invocation ran in, and the manager reports that as the
-     * current status.
-     */
-    @Override
-    public boolean isRollbackOnly() {
-        try {
-            return transactions.getStatus() == Status.STATUS_MARKED_ROLLBACK;
-        } catch (Exception e) {
-            // Not knowing is not the same as knowing it is fine, but the
-            // invocation's own outcome is already decided and refusing it here
-            // would replace a real answer with this uncertainty.
-            LOG.log(Level.DEBUG, "could not read the transaction status", e);
-            return false;
         }
     }
 
