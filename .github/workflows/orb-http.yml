@@ -309,7 +309,11 @@ jobs:
 
       - name: Start a second server, and make the first one call it
         run: |
-          set -euo pipefail
+          set +e
+          {
+          # -e inside the group, so a failing asadmin stops it and the status
+          # below is the failure rather than the exit of the last echo.
+          set -e
           # Two servers is the case this transport exists for: one application
           # server calling another. A second domain on its own ports is the
           # cheapest honest version of that - separate JVM, separate container,
@@ -325,6 +329,14 @@ jobs:
           echo "domain2 http listener:"
           curl -s -o /dev/null -w '  %{http_code}\n' \
             "http://localhost:9080/glassfish-services/common/v1/affinity" || true
+          } 2>&1 | tee /tmp/domain2.log
+          status=${PIPESTATUS[0]}
+          # This step talks to asadmin, whose complaints are the whole
+          # diagnosis when a second server does not come up.
+          tail -20 /tmp/domain2.log | while read -r line; do
+            echo "::notice::domain2: ${line:0:250}"
+          done
+          exit $status
 
       - name: Did the endpoint actually mount?
         run: |
