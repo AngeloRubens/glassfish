@@ -23,7 +23,6 @@
             <groupId>org.glassfish.orb.baseline</groupId>
             <artifactId>orb-baseline-bean</artifactId>
             <version>1.0</version>
-            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>jakarta.platform</groupId>
@@ -91,9 +90,32 @@
                                 <includes>
                                     <include>org.glassfish.main.orb:orb-http-client</include>
                                     <include>org.glassfish.main.orb:orb-http-protocol</include>
+                                    <include>org.glassfish.orb.baseline:orb-baseline-bean</include>
                                 </includes>
                             </artifactSet>
                             <filters>
+                                <filter>
+                                    <!--
+                                        The interfaces only. A bean implements
+                                        an interface its own class loader has to
+                                        be able to see, and these live in the
+                                        other deployment - which is a separate
+                                        loader, so the container found a class
+                                        it could not resolve and concluded the
+                                        jar had no beans in it.
+
+                                        The implementations are deliberately
+                                        left out: bringing TxProbeBean along
+                                        would deploy a second copy of it here,
+                                        on the server that is supposed to be
+                                        calling the far one.
+                                    -->
+                                    <artifact>org.glassfish.orb.baseline:orb-baseline-bean</artifact>
+                                    <includes>
+                                        <include>org/glassfish/orb/baseline/Relay.class</include>
+                                        <include>org/glassfish/orb/baseline/TxProbe.class</include>
+                                    </includes>
+                                </filter>
                                 <filter>
                                     <artifact>*:*</artifact>
                                     <excludes>
