@@ -173,6 +173,10 @@ public final class HttpBaseline {
             transaction.begin();
             try {
                 String both = relay.bothTransactions();
+                System.out.println("        relay said: " + both);
+                if (both.startsWith("ERROR")) {
+                    throw new IllegalStateException(both);
+                }
                 String[] hops = both.split("\\|", -1);
                 if (hops.length != 2) {
                     throw new IllegalStateException("unreadable answer: " + both);
@@ -194,7 +198,10 @@ public final class HttpBaseline {
             transaction.begin();
             boolean refused = false;
             try {
-                relay.markRollbackOnlyRemotely();
+                String marked = relay.markRollbackOnlyRemotely();
+                if (marked.startsWith("ERROR")) {
+                    throw new IllegalStateException(marked);
+                }
                 transaction.commit();
             } catch (RollbackException e) {
                 refused = true;
@@ -208,7 +215,10 @@ public final class HttpBaseline {
         });
 
         failures += check("with no transaction, the second hop runs without one either", () -> {
-            expectNull(relay.remoteTransaction());
+            String answer = relay.remoteTransaction();
+            if (!"none".equals(answer)) {
+                throw new IllegalStateException("expected no transaction, got: " + answer);
+            }
         });
 
         System.out.println();

@@ -38,21 +38,52 @@ public class RelayBean implements Relay {
     @Override
     @TransactionAttribute(TransactionAttributeType.MANDATORY)
     public String bothTransactions() {
-        return here() + '|' + far().transactionKey();
+        try {
+            return here() + '|' + far().transactionKey();
+        } catch (Throwable t) {
+            return error(t);
+        }
     }
 
     @Override
     @TransactionAttribute(TransactionAttributeType.MANDATORY)
-    public void markRollbackOnlyRemotely() {
-        // The decision is taken two servers away from the client that will
-        // ask for the commit.
-        far().markRollbackOnly();
+    public String markRollbackOnlyRemotely() {
+        try {
+            // The decision is taken two servers away from the client that will
+            // ask for the commit.
+            far().markRollbackOnly();
+            return "ok";
+        } catch (Throwable t) {
+            return error(t);
+        }
     }
 
     @Override
     @TransactionAttribute(TransactionAttributeType.SUPPORTS)
     public String remoteTransaction() {
-        return far().transactionKey();
+        try {
+            String key = far().transactionKey();
+            return key == null ? "none" : key;
+        } catch (Throwable t) {
+            return error(t);
+        }
+    }
+
+    /**
+     * Turns whatever went wrong into something that survives the trip.
+     *
+     * @param t what stopped the second hop
+     * @return a single line naming the failure and its causes
+     */
+    private static String error(Throwable t) {
+        StringBuilder line = new StringBuilder("ERROR ");
+        for (Throwable current = t; current != null && line.length() < 900;
+                current = current.getCause() == current ? null : current.getCause()) {
+            line.append(current.getClass().getName()).append(": ")
+                .append(String.valueOf(current.getMessage()).replace('\n', ' '))
+                .append(" <- ");
+        }
+        return line.toString();
     }
 
     private String here() {
@@ -73,16 +104,7 @@ public class RelayBean implements Relay {
                 context.close();
             }
         } catch (Exception e) {
-            // Logged here because the caller may not be able to read it: an
-            // exception carrying a cause chain of classes this server has and
-            // the client does not comes back as "detail could not be decoded",
-            // which says nothing about the far server at all.
-            System.getLogger(RelayBean.class.getName())
-                    .log(System.Logger.Level.ERROR, "relay: cannot reach " + FAR_ENDPOINT, e);
-            // Message only, no cause: what crosses back must be readable by
-            // whoever receives it.
-            throw new IllegalStateException("relay could not reach " + FAR_ENDPOINT
-                    + ": " + e.getClass().getName() + ": " + e.getMessage());
+            throw new IllegalStateException("cannot reach " + FAR_ENDPOINT, e);
         }
     }
 }
