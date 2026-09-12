@@ -9,7 +9,7 @@
     </parent>
 
     <artifactId>orb-baseline-relay</artifactId>
-    <packaging>war</packaging>
+    <packaging>jar</packaging>
 
     <name>Baseline - a bean on one server that calls a bean on another</name>
     <description>
@@ -66,5 +66,46 @@
 
     <build>
         <finalName>orb-baseline-relay</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.3</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <!--
+                                An EJB jar, the same shape as the bean this
+                                calls, with the transport client folded in. A
+                                war would have been the tidier place for a
+                                library, but the server refused it as an EJB
+                                module, and an archive shape that is known to
+                                deploy is worth more here than a tidier one.
+                            -->
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <artifactSet>
+                                <includes>
+                                    <include>org.glassfish.main.orb:orb-http-client</include>
+                                    <include>org.glassfish.main.orb:orb-http-protocol</include>
+                                </includes>
+                            </artifactSet>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/MANIFEST.MF</exclude>
+                                        <exclude>META-INF/*.SF</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
     </build>
 </project>
