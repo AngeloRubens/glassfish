@@ -22,11 +22,15 @@ import com.sun.enterprise.transaction.api.JavaEETransactionManager;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.resource.spi.XATerminator;
+import jakarta.transaction.Status;
+import jakarta.transaction.Synchronization;
 
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
 import java.nio.ByteBuffer;
 import java.security.SecureRandom;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 import javax.transaction.xa.XAException;
@@ -68,6 +72,19 @@ public class GlassFishTransactionBridge implements TransactionBridge {
 
     private final AtomicLong sequence = new AtomicLong();
 
+    /** Branches already being listened to, so one listener is registered per branch. */
+    private static final Set<String> WATCHED = ConcurrentHashMap.newKeySet();
+
+    /**
+     * Branches the manager reported rolled back.
+     * <p>
+     * Entries are removed when the client resolves the transaction. One
+     * abandoned by a client that never commits or rolls back would stay, which
+     * is a small leak in an already exceptional case, and the alternative -
+     * forgetting the decision - would let a later commit succeed.
+     */
+    private static final Set<String> ROLLED_BACK = ConcurrentHashMap.newKeySet();
+
     @Inject
     private JavaEETransactionManager transactions;
 
@@ -77,6 +94,58 @@ public class GlassFishTransactionBridge implements TransactionBridge {
             transactions.recreate(xid, timeoutSeconds);
         } catch (Exception e) {
             throw failure("cannot recreate " + Xids.key(xid), XAException.XAER_RMERR, e);
+        }
+        watchOutcome(xid);
+    }
+
+    /**
+     * Asks to be told how this branch ends.
+     *
+     * <p>A bean can mark the caller's transaction for rollback, and the caller
+     * has no way to learn that: reading the status from the dispatch thread
+     * does not work - the container has taken the branch off the thread by the
+     * time the invocation returns - and asking the manager during the call
+     * disturbs the branch enough to break the next one. Both were tried.
+     *
+     * <p>So nothing is asked. A synchronization is registered once, while the
+     * branch is on the thread where registering is legal, and the manager
+     * reports the outcome when it reaches one. If the branch is rolled back,
+     * a later commit for it is refused instead of being reported as success.
+     *
+     * <p>Safe by construction: this only listens. If the manager never calls
+     * back, nothing is recorded and the behaviour is exactly what it was.
+     *
+     * @param xid the branch just imported
+     */
+    private void watchOutcome(Xid xid) {
+        String key = Xids.key(xid);
+        if (!WATCHED.add(key)) {
+            // recreate runs per invocation and the transaction outlives each
+            // one; registering again would add a second listener for the same
+            // branch.
+            return;
+        }
+        try {
+            transactions.registerSynchronization(new Synchronization() {
+
+                @Override
+                public void beforeCompletion() {
+                }
+
+                @Override
+                public void afterCompletion(int status) {
+                    WATCHED.remove(key);
+                    if (status == Status.STATUS_ROLLEDBACK || status == Status.STATUS_MARKED_ROLLBACK) {
+                        ROLLED_BACK.add(key);
+                        LOG.log(Level.INFO, "branch " + key + " ended rolled back");
+                    }
+                }
+            });
+        } catch (Exception e) {
+            WATCHED.remove(key);
+            // Not fatal: without the listener a rollback simply goes
+            // unreported, which is where this started.
+            LOG.log(Level.DEBUG, "could not watch the outcome of " + key, e);
         }
     }
 
@@ -199,11 +268,26 @@ public class GlassFishTransactionBridge implements TransactionBridge {
      */
     @Override
     public void commitUserTransaction(Xid xid) throws TransactionException {
+        String key = Xids.key(xid);
+        if (ROLLED_BACK.remove(key)) {
+            // Somebody on this server already decided. Reporting a commit
+            // would tell the caller its work is durable when it is not.
+            throw new TransactionException("the transaction was rolled back: " + key,
+                    XAException.XA_RBROLLBACK);
+        }
         commit(xid, true);
     }
 
     @Override
     public void rollbackUserTransaction(Xid xid) throws TransactionException {
+        String key = Xids.key(xid);
+        WATCHED.remove(key);
+        if (ROLLED_BACK.remove(key)) {
+            // Already rolled back by the server. The caller asked for exactly
+            // that, so this succeeded; asking the manager again would fail on
+            // a branch that is gone and report a problem where there is none.
+            return;
+        }
         rollback(xid);
     }
 
