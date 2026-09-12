@@ -275,15 +275,6 @@ public class GlassFishTransactionBridge implements TransactionBridge {
             throw new TransactionException("the transaction was rolled back: " + key,
                     XAException.XA_RBROLLBACK);
         }
-        if (isMarked(xid)) {
-            // Marked but not yet completed: a bean decided this cannot be
-            // committed and the container left the branch as it was. Rolling
-            // back is what the mark means, and the caller is told so rather
-            // than being handed a commit that quietly threw its work away.
-            rollback(xid);
-            throw new TransactionException("the transaction was marked for rollback: " + key,
-                    XAException.XA_RBROLLBACK);
-        }
         commit(xid, true);
     }
 
@@ -298,45 +289,6 @@ public class GlassFishTransactionBridge implements TransactionBridge {
             return;
         }
         rollback(xid);
-    }
-
-    /**
-     * Whether a bean marked this branch during an earlier invocation.
-     *
-     * <p>Read here, in the exchange that asks for the commit, rather than
-     * during the invocation that made the mark. The mark is a property of the
-     * branch, so putting the branch back on a thread is what makes it
-     * readable - and recreate between invocations is the same thing this
-     * transport already does for every call in a transaction.
-     *
-     * <p>Any failure means the probe could not answer, and the commit goes
-     * ahead exactly as before. That is deliberate: this must be able to add a
-     * refusal and never to take one away.
-     *
-     * @param xid the branch about to be committed
-     * @return whether it is marked for rollback
-     */
-    private boolean isMarked(Xid xid) {
-        try {
-            transactions.recreate(xid, 0);
-        } catch (Exception e) {
-            LOG.log(Level.DEBUG, "could not inspect " + Xids.key(xid) + " before committing", e);
-            return false;
-        }
-        try {
-            int status = transactions.getStatus();
-            LOG.log(Level.INFO, "branch " + Xids.key(xid) + " status before commit: " + status);
-            return status == Status.STATUS_MARKED_ROLLBACK || status == Status.STATUS_ROLLEDBACK;
-        } catch (Exception e) {
-            return false;
-        } finally {
-            try {
-                transactions.release(xid);
-            } catch (Exception e) {
-                LOG.log(Level.DEBUG, "could not release after inspecting " + Xids.key(xid), e);
-            }
-            detach();
-        }
     }
 
     private Xid newXid() {
