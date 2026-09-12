@@ -110,6 +110,38 @@ class HttpUserTransactionTest {
     }
 
     @Test
+    @DisplayName("a bean that marked the transaction is honoured by the client's commit")
+    void aServerSideMarkIsHonoured() throws Exception {
+        transaction.begin();
+
+        // What an invocation's reply carries when a bean on the server has
+        // decided the transaction cannot be committed. Without this the caller
+        // commits happily and learns the truth from the coordinator instead of
+        // from its own API - and, worse, a server that failed to refuse would
+        // commit work that was marked.
+        ClientTransactionContext.markRollbackOnly();
+
+        assertEquals(Status.STATUS_MARKED_ROLLBACK, transaction.getStatus());
+        assertThrows(RollbackException.class, transaction::commit);
+        assertTrue(transport.called(TxRoutes.OP_ROLLBACK));
+        assertFalse(transport.called(TxRoutes.OP_COMMIT));
+    }
+
+    @Test
+    @DisplayName("a mark does not outlive its transaction")
+    void theMarkIsNotCarriedIntoTheNextTransaction() throws Exception {
+        transaction.begin();
+        ClientTransactionContext.markRollbackOnly();
+        assertThrows(RollbackException.class, transaction::commit);
+
+        // A mark that leaked would make the next transaction uncommittable for
+        // a reason that no longer exists.
+        transaction.begin();
+        assertEquals(Status.STATUS_ACTIVE, transaction.getStatus());
+        transaction.commit();
+    }
+
+    @Test
     @DisplayName("the thread is released whichever way the transaction ends")
     void theAssociationIsAlwaysCleared() throws Exception {
         transaction.begin();

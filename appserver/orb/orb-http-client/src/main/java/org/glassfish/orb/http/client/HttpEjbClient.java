@@ -46,6 +46,7 @@ import org.glassfish.orb.http.protocol.Marshaller;
 import org.glassfish.orb.http.protocol.Marshallers;
 import org.glassfish.orb.http.protocol.Protocol;
 import org.glassfish.orb.http.protocol.TxContext;
+import org.glassfish.orb.http.protocol.TxRoutes;
 import org.glassfish.orb.http.protocol.Xids;
 
 /**
@@ -301,7 +302,25 @@ public final class HttpEjbClient implements AutoCloseable {
             Thread.currentThread().interrupt();
             throw new EJBException("interrupted while invoking " + method.getName(), e);
         }
+        noteRollbackOnly(response);
         return decoder.decodeInvocationResult(response, viewClass.getClassLoader());
+    }
+
+    /**
+     * Records a rollback decision taken on the server.
+     *
+     * <p>A bean marking the caller's transaction is the ordinary way this
+     * happens, and the reply is the only thing that carries it back. Without
+     * this the caller would go on to commit a transaction that cannot be
+     * committed, and find out from the coordinator rather than from its own
+     * API.
+     *
+     * @param response the reply to the invocation
+     */
+    private static void noteRollbackOnly(HttpTransport.Response response) {
+        if (Boolean.parseBoolean(response.firstHeader(TxRoutes.H_ROLLBACK_ONLY))) {
+            ClientTransactionContext.markRollbackOnly();
+        }
     }
 
     /**

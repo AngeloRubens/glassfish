@@ -77,6 +77,13 @@ public final class TxRoutes {
     public static final String H_XID = "x-gf-txn-xid";
     public static final String H_READ_ONLY = "x-gf-txn-read-only";
 
+    /**
+     * Set on an invocation's reply when a bean marked the caller's transaction
+     * for rollback. The caller records it and refuses its own commit, which is
+     * what {@code UserTransaction} promises.
+     */
+    public static final String H_ROLLBACK_ONLY = "x-gf-txn-rollback-only";
+
     private static final int CTX_SEGMENTS = 1;
     public static final int IDX_SERVICE = CTX_SEGMENTS;
     public static final int IDX_VERSION = CTX_SEGMENTS + 1;
