@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.glassfish.orb.baseline</groupId>
+        <artifactId>orb-baseline</artifactId>
+        <version>1.0</version>
+    </parent>
+
+    <artifactId>orb-baseline-relay</artifactId>
+    <packaging>war</packaging>
+
+    <name>Baseline - a bean on one server that calls a bean on another</name>
+    <description>
+        Deployed to the first server. Its bean calls a bean on the second over
+        this transport, inside whatever transaction the caller brought, which
+        is the case two application servers make when they talk to each other.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.glassfish.orb.baseline</groupId>
+            <artifactId>orb-baseline-bean</artifactId>
+            <version>1.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.platform</groupId>
+            <artifactId>jakarta.jakartaee-api</artifactId>
+            <version>10.0.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <!--
+            Carried inside the archive rather than taken from the server's
+            modules. The transport is there as OSGi bundles, and an ordinary
+            application is not one: bundling the client is what makes this
+            deployable without asking how the server's class loaders are wired.
+        -->
+        <dependency>
+            <groupId>org.glassfish.main.orb</groupId>
+            <artifactId>orb-http-client</artifactId>
+            <version>8.0.5-SNAPSHOT</version>
+            <exclusions>
+                <!--
+                    The server provides these. A second copy inside the archive
+                    is how an application ends up with two of the same type and
+                    a cast that cannot succeed.
+                -->
+                <exclusion>
+                    <groupId>jakarta.ejb</groupId>
+                    <artifactId>jakarta.ejb-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>jakarta.transaction</groupId>
+                    <artifactId>jakarta.transaction-api</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.glassfish.main.orb</groupId>
+            <artifactId>orb-http-protocol</artifactId>
+            <version>8.0.5-SNAPSHOT</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>orb-baseline-relay</finalName>
+    </build>
+</project>

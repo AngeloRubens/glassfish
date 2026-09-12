@@ -29,5 +29,6 @@
         <module>bean</module>
         <module>client</module>
         <module>client-http</module>
+        <module>relay</module>
     </modules>
 </project>
