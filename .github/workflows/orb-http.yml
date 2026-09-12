@@ -195,6 +195,21 @@ jobs:
         # third-party library, so it should be checked where anyone can see it.
         run: mvn -B -DskipTests=false -pl appserver/orb/orb-http-codec-fory install
 
+      - name: Are the modules in the distribution at all?
+        run: |
+          set -euo pipefail
+          # The integration job copies jars into modules/ by hand, which works
+          # and hides whether a released server would contain them. The
+          # featuresets are what decide that, so they are checked here.
+          for f in appserver/featuresets/glassfish/pom.xml appserver/featuresets/embedded-all/pom.xml; do
+            for m in orb-http-protocol orb-http-client orb-http-server orb-http-glassfish; do
+              grep -q "<artifactId>$m</artifactId>" "$f" \
+                || { echo "::error::$m is missing from $f"; exit 1; }
+            done
+            echo "ok $f"
+          done
+          mvn -B -q -pl appserver/featuresets/glassfish validate
+
       - name: Check the modules are OSGi bundles
         run: |
           set -euo pipefail
