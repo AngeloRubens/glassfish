@@ -134,10 +134,107 @@ public final class HttpBaseline {
             }
         });
 
+        failures += attributes(probe, transaction);
         failures += xaBranch(probe, environment);
 
         System.out.println();
         return failures;
+    }
+
+    /**
+     * What the container does with the caller's transaction, per attribute.
+     *
+     * <p>Every method asked here answers the same question - which transaction
+     * am I in - so any difference between them is the attribute doing its
+     * work. That is what makes this a test of the transport rather than of the
+     * container: the container's behaviour is well defined, and what is under
+     * test is whether a transaction that arrived over HTTP is a real one to it.
+     */
+    private static int attributes(TxProbe probe, UserTransaction transaction) throws Exception {
+        System.out.println();
+        System.out.println("== transaction attributes ==");
+        int failures = 0;
+
+        failures += check("inside a transaction, REQUIRED, MANDATORY and SUPPORTS all join it", () -> {
+            transaction.begin();
+            try {
+                String required = probe.required();
+                expectNotNull(required, "REQUIRED did not run in a transaction");
+                same("MANDATORY", required, probe.mandatory());
+                same("SUPPORTS", required, probe.supports());
+            } finally {
+                transaction.commit();
+            }
+        });
+
+        failures += check("REQUIRES_NEW gets its own transaction, not the caller's", () -> {
+            transaction.begin();
+            try {
+                String caller = probe.required();
+                String fresh = probe.requiresNew();
+                expectNotNull(fresh, "REQUIRES_NEW did not run in a transaction");
+                if (caller.equals(fresh)) {
+                    throw new IllegalStateException(
+                            "REQUIRES_NEW ran in the caller's transaction: " + fresh);
+                }
+            } finally {
+                transaction.commit();
+            }
+        });
+
+        failures += check("NOT_SUPPORTED runs outside the caller's transaction", () -> {
+            transaction.begin();
+            try {
+                expectNull(probe.notSupported());
+                // And the caller's is still there afterwards: suspended, not ended.
+                expectNotNull(probe.required(), "the caller's transaction did not come back");
+            } finally {
+                transaction.commit();
+            }
+        });
+
+        failures += check("NEVER refuses to run inside a transaction", () -> {
+            transaction.begin();
+            try {
+                probe.never();
+                throw new IllegalStateException("NEVER ran with a transaction present");
+            } catch (IllegalStateException e) {
+                throw e;
+            } catch (Exception expected) {
+                // The specification says refuse; which exception carries that
+                // is the container's business.
+            } finally {
+                transaction.rollback();
+            }
+        });
+
+        failures += check("outside a transaction, MANDATORY refuses and the others cope", () -> {
+            // REQUIRED starts one of its own.
+            expectNotNull(probe.required(), "REQUIRED did not start a transaction");
+            // SUPPORTS and NOT_SUPPORTED simply run without one.
+            expectNull(probe.supports());
+            expectNull(probe.notSupported());
+            // NEVER is content, since there is nothing to refuse.
+            expectNull(probe.never());
+            try {
+                probe.mandatory();
+                throw new IllegalStateException("MANDATORY ran without a transaction");
+            } catch (IllegalStateException e) {
+                throw e;
+            } catch (Exception expected) {
+                // Refused, which is the whole meaning of the attribute.
+            }
+        });
+
+        System.out.println();
+        return failures;
+    }
+
+    private static void same(String what, String expected, String actual) {
+        if (!expected.equals(actual)) {
+            throw new IllegalStateException(what + " ran in " + actual
+                    + " rather than the caller's " + expected);
+        }
     }
 
     /**
