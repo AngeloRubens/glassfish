@@ -59,6 +59,9 @@ import org.glassfish.orb.http.protocol.Xids;
  */
 public final class EjbDispatcher {
 
+    private static final System.Logger LOG =
+            System.getLogger(EjbDispatcher.class.getName());
+
     private final ContainerBridge container;
     private final SecurityBridge security;
     private final TransactionBridge transactions;
@@ -205,6 +208,7 @@ public final class EjbDispatcher {
             Object target = null;
             Method invokedMethod = null;
             Xid imported = null;
+            boolean markedDuring = false;
             try {
                 Method method = resolveMethod(loader, invocation);
                 invokedMethod = method;
@@ -218,6 +222,11 @@ public final class EjbDispatcher {
 
                 target = container.getTargetObject(key, invocation.viewClass());
                 Object result = unwrapAsyncResult(callTarget(target, method, args));
+                // Read here as well as in the finally: the container may
+                // complete a transaction on the way out of the invocation, and
+                // if it does, the mark is gone before the finally runs. Which
+                // of the two readings sees it is the thing to find out.
+                markedDuring = imported != null && transactions.isRollbackOnly();
 
                 if (registration.isCancelled()) {
                     // The result is discarded on purpose: the caller has said
@@ -250,12 +259,17 @@ public final class EjbDispatcher {
                 if (target != null) {
                     container.releaseTargetObject(target);
                 }
-                if (imported != null && transactions.isRollbackOnly()) {
-                    // Asked before the release, because that is the last moment
-                    // the answer exists. The client is coordinating this
-                    // transaction and has no other way to learn that a bean on
-                    // this server has already decided it cannot be committed.
+                boolean markedAfter = imported != null && transactions.isRollbackOnly();
+                if (markedDuring || markedAfter) {
+                    // The client is coordinating this transaction and has no
+                    // other way to learn that a bean on this server has already
+                    // decided it cannot be committed.
                     exchange.setResponseHeader(TxRoutes.H_ROLLBACK_ONLY, "true");
+                }
+                if (imported != null) {
+                    LOG.log(System.Logger.Level.INFO,
+                            "txn mark for " + Xids.key(imported)
+                            + ": during=" + markedDuring + " after=" + markedAfter);
                 }
                 // Release after the container is done with the target, and
                 // whatever happened above: a branch left associated with this
