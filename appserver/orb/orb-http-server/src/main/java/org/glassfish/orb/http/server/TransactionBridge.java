@@ -88,24 +88,6 @@ public interface TransactionBridge {
     /** Disassociates the transaction imported by {@link #recreate}. */
     void release(Xid xid) throws TransactionException;
 
-    /**
-     * Whether the branch on this thread has been marked for rollback.
-     * <p>
-     * Asked while the branch is still associated, which is the only moment the
-     * answer is available: after it is released the mark is the transaction
-     * manager's business and not visible from here.
-     * <p>
-     * It matters because the mark is usually made by the bean, on this server,
-     * inside a transaction the client is coordinating. Nothing else carries
-     * that fact back, and a client that never hears it will commit a
-     * transaction that cannot be committed.
-     *
-     * @return whether the current branch is rollback-only
-     */
-    default boolean isRollbackOnly() {
-        return false;
-    }
-
     // ---- this server as a branch of the caller's transaction ---------------
 
     /** Runs the {@code beforeCompletion} synchronizations for the branch. */

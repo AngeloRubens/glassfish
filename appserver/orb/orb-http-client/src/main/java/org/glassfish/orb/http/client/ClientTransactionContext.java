@@ -35,11 +35,7 @@ import javax.transaction.xa.Xid;
  */
 public final class ClientTransactionContext {
 
-    private record Association(Xid xid, long timeoutSeconds, java.util.concurrent.atomic.AtomicBoolean rollbackOnly) {
-
-        Association(Xid xid, long timeoutSeconds) {
-            this(xid, timeoutSeconds, new java.util.concurrent.atomic.AtomicBoolean());
-        }
+    private record Association(Xid xid, long timeoutSeconds) {
     }
 
     private static final ThreadLocal<Association> CURRENT = new ThreadLocal<>();
@@ -57,26 +53,6 @@ public final class ClientTransactionContext {
     public static long currentTimeoutSeconds() {
         Association association = CURRENT.get();
         return association == null ? 0 : association.timeoutSeconds();
-    }
-
-    /**
-     * Records that this transaction can no longer be committed.
-     * <p>
-     * Set either by the caller, or by a reply saying a bean on the server has
-     * decided it. The two are the same fact and are kept in the same place, so
-     * that whoever commits sees it however it arrived.
-     */
-    public static void markRollbackOnly() {
-        Association association = CURRENT.get();
-        if (association != null) {
-            association.rollbackOnly().set(true);
-        }
-    }
-
-    /** @return whether this transaction has been marked, by either side */
-    public static boolean isRollbackOnly() {
-        Association association = CURRENT.get();
-        return association != null && association.rollbackOnly().get();
     }
 
     public static void associate(Xid xid, long timeoutSeconds) {

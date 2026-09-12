@@ -45,7 +45,6 @@ import org.glassfish.orb.http.protocol.PathScanner;
 import org.glassfish.orb.http.protocol.Protocol;
 import org.glassfish.orb.http.protocol.ProtocolException;
 import org.glassfish.orb.http.protocol.TxContext;
-import org.glassfish.orb.http.protocol.TxRoutes;
 import org.glassfish.orb.http.protocol.Xids;
 
 /**
@@ -249,13 +248,6 @@ public final class EjbDispatcher {
             } finally {
                 if (target != null) {
                     container.releaseTargetObject(target);
-                }
-                if (imported != null && transactions.isRollbackOnly()) {
-                    // Asked before the release, because that is the last moment
-                    // the answer exists. The client is coordinating this
-                    // transaction and has no other way to learn that a bean on
-                    // this server has already decided it cannot be committed.
-                    exchange.setResponseHeader(TxRoutes.H_ROLLBACK_ONLY, "true");
                 }
                 // Release after the container is done with the target, and
                 // whatever happened above: a branch left associated with this

@@ -76,7 +76,7 @@ public final class HttpUserTransaction implements UserTransaction {
             HeuristicRollbackException, SecurityException, IllegalStateException, SystemException {
         Xid xid = require();
         try {
-            if (Boolean.TRUE.equals(rollbackOnly.get()) || ClientTransactionContext.isRollbackOnly()) {
+            if (Boolean.TRUE.equals(rollbackOnly.get())) {
                 // Marked for rollback: honour it here rather than sending a
                 // commit the server would have to refuse anyway.
                 client.rollbackUserTransaction(xid);
@@ -126,7 +126,7 @@ public final class HttpUserTransaction implements UserTransaction {
         if (ClientTransactionContext.current() == null) {
             return Status.STATUS_NO_TRANSACTION;
         }
-        return Boolean.TRUE.equals(rollbackOnly.get()) || ClientTransactionContext.isRollbackOnly()
+        return Boolean.TRUE.equals(rollbackOnly.get())
                 ? Status.STATUS_MARKED_ROLLBACK
                 : Status.STATUS_ACTIVE;
     }
