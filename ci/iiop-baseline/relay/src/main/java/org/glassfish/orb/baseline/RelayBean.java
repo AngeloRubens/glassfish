@@ -73,7 +73,16 @@ public class RelayBean implements Relay {
                 context.close();
             }
         } catch (Exception e) {
-            throw new IllegalStateException("cannot reach " + FAR_ENDPOINT + ": " + e, e);
+            // Logged here because the caller may not be able to read it: an
+            // exception carrying a cause chain of classes this server has and
+            // the client does not comes back as "detail could not be decoded",
+            // which says nothing about the far server at all.
+            System.getLogger(RelayBean.class.getName())
+                    .log(System.Logger.Level.ERROR, "relay: cannot reach " + FAR_ENDPOINT, e);
+            // Message only, no cause: what crosses back must be readable by
+            // whoever receives it.
+            throw new IllegalStateException("relay could not reach " + FAR_ENDPOINT
+                    + ": " + e.getClass().getName() + ": " + e.getMessage());
         }
     }
 }

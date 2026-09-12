@@ -451,6 +451,10 @@ jobs:
               "$GLASSFISH_HOME/glassfish/domains/domain2/logs/server.log" | tail -5 | \
               while read -r line; do echo "::error::far: ${line:0:250}"; done || true
           fi
+          # The relay's own account of the second hop.
+          grep -hE "relay: cannot reach" \
+            "$GLASSFISH_HOME/glassfish/domains/domain1/logs/server.log" | tail -3 | \
+            while read -r line; do echo "::error::relay: ${line:0:600}"; done || true
           grep -hE "ended rolled back|status before commit" \
             "$GLASSFISH_HOME/glassfish/domains/domain1/logs/server.log" | tail -4 | \
             while read -r line; do echo "::error::outcome: ${line:0:200}"; done || true
