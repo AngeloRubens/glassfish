@@ -266,6 +266,25 @@ public class GlassFishTransactionBridge implements TransactionBridge {
      * the client began here, so there is nobody to agree with and a prepare
      * would be a round trip spent asking ourselves.
      */
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Asks prepare first, and that is the point. A branch a bean marked for
+     * rollback refuses there, with a rollback code, which is how the client
+     * learns its commit cannot happen - and prepare is an operation the
+     * contract defines, so unlike reading the branch's status it does not
+     * disturb anything. Three earlier attempts read the status instead, and
+     * each broke something that worked.
+     *
+     * <p>Prepare does not always apply. With no XA resource ever enlisted -
+     * the ordinary case for a bean that touched no database - it answers with
+     * a protocol error rather than a vote, and then the single resource
+     * manager case is a one-phase commit, which is what this did before.
+     *
+     * <p>Established by running the sequence against a real server rather than
+     * reasoned about: a marked branch refuses prepare with XA_RBROLLBACK, an
+     * unmarked one refuses with XAER_PROTO and then commits in one phase.
+     */
     @Override
     public void commitUserTransaction(Xid xid) throws TransactionException {
         String key = Xids.key(xid);
@@ -275,7 +294,32 @@ public class GlassFishTransactionBridge implements TransactionBridge {
             throw new TransactionException("the transaction was rolled back: " + key,
                     XAException.XA_RBROLLBACK);
         }
-        commit(xid, true);
+
+        XATerminator terminator = terminator();
+        try {
+            terminator.prepare(xid);
+        } catch (XAException e) {
+            if (isRollback(e.errorCode)) {
+                throw new TransactionException("the transaction was marked for rollback: " + key,
+                        e.errorCode, e);
+            }
+            // Prepare does not apply to this branch. One phase, as before.
+            commit(xid, true);
+            return;
+        }
+        try {
+            terminator.commit(xid, false);
+        } catch (XAException e) {
+            throw failure("commit failed for " + key, e.errorCode, e);
+        }
+    }
+
+    /**
+     * @param errorCode an XA error code
+     * @return whether it says the branch was or must be rolled back
+     */
+    private static boolean isRollback(int errorCode) {
+        return errorCode >= XAException.XA_RBBASE && errorCode <= XAException.XA_RBEND;
     }
 
     @Override
