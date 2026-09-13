@@ -266,16 +266,39 @@ public class GlassFishTransactionBridge implements TransactionBridge {
      * the client began here, so there is nobody to agree with and a prepare
      * would be a round trip spent asking ourselves.
      */
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Asks the listener after committing, not before. The commit is what
+     * drives the branch to an outcome, so before it there is nothing for a
+     * listener to have heard - which is why consulting it first found nothing
+     * and let every marked transaction through.
+     *
+     * <p>Measured against a real server with the bean deployed and called:
+     * a branch a bean marked reports ROLLEDBACK to the listener and a clean
+     * one reports COMMITTED, in both cases while the commit is running. The
+     * work is not committed against the mark; what was wrong was only what
+     * the caller was told about it.
+     */
     @Override
     public void commitUserTransaction(Xid xid) throws TransactionException {
         String key = Xids.key(xid);
         if (ROLLED_BACK.remove(key)) {
-            // The manager already reported this branch rolled back. Reporting
-            // a commit would tell the caller its work is durable when it is not.
+            // Already resolved before the request arrived - a timeout, or a
+            // rollback from elsewhere.
             throw new TransactionException("the transaction was rolled back: " + key,
                     XAException.XA_RBROLLBACK);
         }
+
         commit(xid, true);
+
+        if (ROLLED_BACK.remove(key)) {
+            // The manager drove this branch to a rollback while committing it,
+            // because a bean had marked it. Reporting success would tell the
+            // caller its work is durable when it has just been discarded.
+            throw new TransactionException("the transaction was marked for rollback"
+                    + " and was rolled back: " + key, XAException.XA_RBROLLBACK);
+        }
     }
 
     @Override
