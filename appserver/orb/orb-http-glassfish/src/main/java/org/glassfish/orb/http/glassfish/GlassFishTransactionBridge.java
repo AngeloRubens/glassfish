@@ -29,6 +29,7 @@ import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
 import java.nio.ByteBuffer;
 import java.security.SecureRandom;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -101,19 +102,46 @@ public class GlassFishTransactionBridge implements TransactionBridge {
     }
 
     /**
-     * One line per transaction operation, with its outcome.
-     *
-     * <p>Six attempts at one guarantee were spent inferring what the sequence
-     * was from which test failed. This says it outright, which is cheaper than
-     * another theory.
+     * The operations a branch went through, kept until it ends.
+     * <p>
+     * One line per branch rather than per operation, because the channel that
+     * carries these out of a run holds ten lines per step - a limit that has
+     * hidden the decisive line three times. A whole sequence in one line fits;
+     * forty separate lines do not.
+     */
+    private static final Map<String, StringBuilder> HISTORY = new ConcurrentHashMap<>();
+
+    /**
+     * Records an operation against its branch.
      *
      * @param operation what was attempted
      * @param xid which branch
      * @param failure what went wrong, or null
      */
     private static void trace(String operation, Xid xid, Throwable failure) {
-        LOG.log(Level.INFO, "txop " + operation + ' ' + Xids.key(xid)
-                + (failure == null ? " -> ok" : " -> FAILED " + failure));
+        HISTORY.computeIfAbsent(Xids.key(xid), k -> new StringBuilder())
+                .append(operation)
+                .append(failure == null ? "" : "!" + shortName(failure))
+                .append(' ');
+    }
+
+    /**
+     * Reports a branch's whole life, once, when it ends.
+     *
+     * @param xid the branch
+     * @param ending how it finished
+     */
+    private static void traceEnd(Xid xid, String ending) {
+        String key = Xids.key(xid);
+        StringBuilder history = HISTORY.remove(key);
+        LOG.log(Level.INFO, "txlife " + key + " [" + (history == null ? "" : history.toString().trim())
+                + "] listener=" + ROLLED_BACK.contains(key) + " end=" + ending);
+    }
+
+    private static String shortName(Throwable t) {
+        String name = t.getClass().getSimpleName();
+        String message = t.getMessage();
+        return name + (message == null ? "" : "(" + message.replace('\n', ' ') + ")");
     }
 
     /**
@@ -227,11 +255,12 @@ public class GlassFishTransactionBridge implements TransactionBridge {
         try {
             terminator().commit(xid, onePhase);
         } catch (XAException e) {
-            trace("commit(xa,onePhase=" + onePhase + ")", xid, e);
+            trace("commit(onePhase=" + onePhase + ")", xid, e);
+            traceEnd(xid, "commit failed");
             throw failure("commit failed for " + Xids.key(xid), e.errorCode, e);
         }
-        trace("commit(xa,onePhase=" + onePhase + ") listenerSaysRolledBack="
-                + ROLLED_BACK.contains(Xids.key(xid)), xid, null);
+        trace("commit(onePhase=" + onePhase + ")", xid, null);
+        traceEnd(xid, "committed");
     }
 
     @Override
@@ -239,10 +268,12 @@ public class GlassFishTransactionBridge implements TransactionBridge {
         try {
             terminator().rollback(xid);
         } catch (XAException e) {
-            trace("rollback(xa)", xid, e);
+            trace("rollback", xid, e);
+            traceEnd(xid, "rollback failed");
             throw failure("rollback failed for " + Xids.key(xid), e.errorCode, e);
         }
-        trace("rollback(xa)", xid, null);
+        trace("rollback", xid, null);
+        traceEnd(xid, "rolled back");
     }
 
     @Override
@@ -313,7 +344,7 @@ public class GlassFishTransactionBridge implements TransactionBridge {
                     XAException.XA_RBROLLBACK);
         }
 
-        trace("commitUserTransaction", xid, null);
+        trace("commitUT", xid, null);
         commit(xid, true);
 
         if (ROLLED_BACK.remove(key)) {
@@ -328,8 +359,7 @@ public class GlassFishTransactionBridge implements TransactionBridge {
     @Override
     public void rollbackUserTransaction(Xid xid) throws TransactionException {
         String key = Xids.key(xid);
-        trace("rollbackUserTransaction listenerSaysRolledBack="
-                + ROLLED_BACK.contains(key), xid, null);
+        trace("rollbackUT", xid, null);
         WATCHED.remove(key);
         if (ROLLED_BACK.remove(key)) {
             // Already rolled back by the server. The caller asked for exactly
