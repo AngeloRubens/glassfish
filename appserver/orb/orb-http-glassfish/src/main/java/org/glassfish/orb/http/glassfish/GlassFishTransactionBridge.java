@@ -204,30 +204,12 @@ public class GlassFishTransactionBridge implements TransactionBridge {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     *
-     * <p>The listener is consulted here, after the commit, because both
-     * families arrive at this method: a client committing its own transaction
-     * and a coordinator driving this server as one branch of a larger one. The
-     * second is how a bean two servers away has its rollback heard - the far
-     * branch is driven through this same commit, and a mark made over there
-     * has to refuse here or it never reaches anyone.
-     */
     @Override
     public void commit(Xid xid, boolean onePhase) throws TransactionException {
-        String key = Xids.key(xid);
         try {
             terminator().commit(xid, onePhase);
         } catch (XAException e) {
-            throw failure("commit failed for " + key, e.errorCode, e);
-        }
-        if (ROLLED_BACK.remove(key)) {
-            // The manager drove this branch to a rollback while committing it,
-            // because a bean had marked it. Reporting success would tell the
-            // caller its work is durable when it has just been discarded.
-            throw new TransactionException("the transaction was marked for rollback"
-                    + " and was rolled back: " + key, XAException.XA_RBROLLBACK);
+            throw failure("commit failed for " + Xids.key(xid), e.errorCode, e);
         }
     }
 
@@ -298,14 +280,6 @@ public class GlassFishTransactionBridge implements TransactionBridge {
      * work is not committed against the mark; what was wrong was only what
      * the caller was told about it.
      */
-    /**
-     * {@inheritDoc}
-     *
-     * <p>One phase: this server is the only resource manager in a transaction
-     * the client began here, so there is nobody to agree with and a prepare
-     * would be a round trip spent asking ourselves. The check that a commit
-     * meant something lives in {@link #commit}, which both families reach.
-     */
     @Override
     public void commitUserTransaction(Xid xid) throws TransactionException {
         String key = Xids.key(xid);
@@ -315,7 +289,16 @@ public class GlassFishTransactionBridge implements TransactionBridge {
             throw new TransactionException("the transaction was rolled back: " + key,
                     XAException.XA_RBROLLBACK);
         }
+
         commit(xid, true);
+
+        if (ROLLED_BACK.remove(key)) {
+            // The manager drove this branch to a rollback while committing it,
+            // because a bean had marked it. Reporting success would tell the
+            // caller its work is durable when it has just been discarded.
+            throw new TransactionException("the transaction was marked for rollback"
+                    + " and was rolled back: " + key, XAException.XA_RBROLLBACK);
+        }
     }
 
     @Override
