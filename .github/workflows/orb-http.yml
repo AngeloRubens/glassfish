@@ -423,59 +423,19 @@ jobs:
           done
           exit $status
 
-      - name: What the transactions actually did
+      - name: Every scenario and its outcome
         if: always()
         run: |
           set +e
-          # The step summary, not annotations: annotations stop at ten per
-          # step and have hidden the decisive line three times now. This has
-          # no such limit and needs no sign-in to read.
+          # The step summary rather than annotations: those stop at ten per
+          # step, and the whole list is the point here.
           {
-            echo "## Transaction operations, in order"
-            echo
-            echo '```'
-            grep -h "txlife " \
-              "$GLASSFISH_HOME/glassfish/domains/domain1/logs/server.log" \
-              "$GLASSFISH_HOME/glassfish/domains/domain2/logs/server.log" 2>/dev/null \
-              | sed 's/.*txlife /txlife /' | tail -60
-            echo '```'
-            echo
             echo "## Scenario outcomes"
             echo
             echo '```'
             grep -hE "^ *(ok|FAIL)|relay said|rollback-only commit|^== " /tmp/http.log /tmp/fory.log 2>/dev/null | tail -60
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: The life of each transaction, on the server the client talks to
-        if: always()
-        run: |
-          grep -h "txlife " \
-            "$GLASSFISH_HOME/glassfish/domains/domain1/logs/server.log" 2>/dev/null \
-            | sed 's/.*txlife //' | tail -9 | \
-            while read -r line; do echo "::error::near ${line:0:700}"; done || true
-
-      # A separate step on purpose: the ten-annotation limit is per step, and
-      # the two servers' accounts of the same transaction are what makes the
-      # second hop readable at all.
-      # A thread that came back from the pool still holding a transaction is
-      # how a call made deliberately outside one comes to report another's.
-      - name: Transactions found on threads that should have had none
-        if: always()
-        run: |
-          grep -h "txstray " \
-            "$GLASSFISH_HOME/glassfish/domains/domain1/logs/server.log" \
-            "$GLASSFISH_HOME/glassfish/domains/domain2/logs/server.log" 2>/dev/null \
-            | sed 's/.*txstray //' | tail -8 | \
-            while read -r line; do echo "::error::txstray ${line:0:400}"; done || true
-
-      - name: The life of each transaction, on the server it calls
-        if: always()
-        run: |
-          grep -h "txlife " \
-            "$GLASSFISH_HOME/glassfish/domains/domain2/logs/server.log" 2>/dev/null \
-            | sed 's/.*txlife //' | tail -9 | \
-            while read -r line; do echo "::error::far ${line:0:700}"; done || true
 
       - name: Did the server actually load the codec bundle?
         if: always()

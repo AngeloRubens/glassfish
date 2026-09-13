@@ -27,8 +27,6 @@ import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
 import java.nio.ByteBuffer;
 import java.security.SecureRandom;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 import javax.transaction.xa.XAException;
@@ -78,53 +76,8 @@ public class GlassFishTransactionBridge implements TransactionBridge {
         try {
             transactions.recreate(xid, timeoutSeconds);
         } catch (Exception e) {
-            trace("recreate", xid, e);
             throw failure("cannot recreate " + Xids.key(xid), XAException.XAER_RMERR, e);
         }
-        trace("recreate", xid, null);
-    }
-
-    /**
-     * The operations a branch went through, kept until it ends.
-     * <p>
-     * One line per branch rather than per operation, because the channel that
-     * carries these out of a run holds ten lines per step - a limit that has
-     * hidden the decisive line three times. A whole sequence in one line fits;
-     * forty separate lines do not.
-     */
-    private static final Map<String, StringBuilder> HISTORY = new ConcurrentHashMap<>();
-
-    /**
-     * Records an operation against its branch.
-     *
-     * @param operation what was attempted
-     * @param xid which branch
-     * @param failure what went wrong, or null
-     */
-    private static void trace(String operation, Xid xid, Throwable failure) {
-        HISTORY.computeIfAbsent(Xids.key(xid), k -> new StringBuilder())
-                .append(operation)
-                .append(failure == null ? "" : "!" + shortName(failure))
-                .append(' ');
-    }
-
-    /**
-     * Reports a branch's whole life, once, when it ends.
-     *
-     * @param xid the branch
-     * @param ending how it finished
-     */
-    private static void traceEnd(Xid xid, String ending) {
-        String key = Xids.key(xid);
-        StringBuilder history = HISTORY.remove(key);
-        LOG.log(Level.INFO, "txlife " + key + " [" + (history == null ? "" : history.toString().trim())
-                + "] end=" + ending);
-    }
-
-    private static String shortName(Throwable t) {
-        String name = t.getClass().getSimpleName();
-        String message = t.getMessage();
-        return name + (message == null ? "" : "(" + message.replace('\n', ' ') + ")");
     }
 
     @Override
@@ -134,7 +87,7 @@ public class GlassFishTransactionBridge implements TransactionBridge {
         } catch (Exception e) {
             throw failure("cannot release " + Xids.key(xid), XAException.XAER_RMERR, e);
         } finally {
-            suspendQuietly();
+            detach();
         }
     }
 
@@ -152,25 +105,13 @@ public class GlassFishTransactionBridge implements TransactionBridge {
      */
     @Override
     public void detach() {
-        Object stray = current();
-        if (stray != null) {
-            // Worth a line: the caller has just said this thread should have
-            // no transaction, and it had one. Either an earlier request left
-            // it, or this one carried one nobody declared.
-            LOG.log(Level.INFO, "txstray took a transaction off this thread: " + stray);
-        }
-        suspendQuietly();
-    }
-
-    /**
-     * Takes whatever is on this thread off it, and says nothing.
-     *
-     * <p>Used after releasing a branch, where finding a transaction is the
-     * ordinary case rather than something to report.
-     */
-    private void suspendQuietly() {
         try {
-            if (current() != null) {
+            Object stray = current();
+            if (stray != null) {
+                // Not an error - a released branch is the ordinary case - but
+                // worth a line when someone goes looking for a request that
+                // ran in a transaction nobody sent it.
+                LOG.log(Level.DEBUG, "took a transaction off this thread: " + stray);
                 transactions.suspend();
             }
         } catch (Exception e) {
@@ -219,13 +160,9 @@ public class GlassFishTransactionBridge implements TransactionBridge {
             vote = terminator().prepare(xid);
         } catch (XAException e) {
             discard(xid);
-            trace("prepare", xid, e);
-            traceEnd(xid, "refused at prepare");
             throw failure("prepare failed for " + Xids.key(xid), e.errorCode, e);
         }
-        trace("prepare=" + vote, xid, null);
         if (vote == XAResource.XA_RDONLY) {
-            traceEnd(xid, "read only");
         }
         return vote;
     }
@@ -256,12 +193,8 @@ public class GlassFishTransactionBridge implements TransactionBridge {
         try {
             terminator().commit(xid, false);
         } catch (XAException e) {
-            trace("commit", xid, e);
-            traceEnd(xid, "commit failed");
             throw failure("commit failed for " + Xids.key(xid), e.errorCode, e);
         }
-        trace("commit", xid, null);
-        traceEnd(xid, "committed");
     }
 
     /**
@@ -302,12 +235,8 @@ public class GlassFishTransactionBridge implements TransactionBridge {
         try {
             terminator().rollback(xid);
         } catch (XAException e) {
-            trace("rollback", xid, e);
-            traceEnd(xid, "rollback failed");
             throw failure("rollback failed for " + Xids.key(xid), e.errorCode, e);
         }
-        trace("rollback", xid, null);
-        traceEnd(xid, "rolled back");
     }
 
     @Override
@@ -357,13 +286,11 @@ public class GlassFishTransactionBridge implements TransactionBridge {
      */
     @Override
     public void commitUserTransaction(Xid xid) throws TransactionException {
-        trace("commitUT", xid, null);
         commitOnePhase(xid);
     }
 
     @Override
     public void rollbackUserTransaction(Xid xid) throws TransactionException {
-        trace("rollbackUT", xid, null);
         rollback(xid);
     }
 
