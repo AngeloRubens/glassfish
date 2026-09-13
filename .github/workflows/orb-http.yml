@@ -436,7 +436,8 @@ jobs:
             echo '```'
             grep -h "txlife " \
               "$GLASSFISH_HOME/glassfish/domains/domain1/logs/server.log" \
-              | sed 's/.*txlife /txlife /' | tail -40
+              "$GLASSFISH_HOME/glassfish/domains/domain2/logs/server.log" 2>/dev/null \
+              | sed 's/.*txlife /txlife /' | tail -60
             echo '```'
             echo
             echo "## Scenario outcomes"
@@ -446,13 +447,24 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: The life of each transaction
+      - name: The life of each transaction, on the server the client talks to
         if: always()
         run: |
           grep -h "txlife " \
             "$GLASSFISH_HOME/glassfish/domains/domain1/logs/server.log" 2>/dev/null \
             | sed 's/.*txlife //' | tail -9 | \
-            while read -r line; do echo "::error::txlife ${line:0:700}"; done || true
+            while read -r line; do echo "::error::near ${line:0:700}"; done || true
+
+      # A separate step on purpose: the ten-annotation limit is per step, and
+      # the two servers' accounts of the same transaction are what makes the
+      # second hop readable at all.
+      - name: The life of each transaction, on the server it calls
+        if: always()
+        run: |
+          grep -h "txlife " \
+            "$GLASSFISH_HOME/glassfish/domains/domain2/logs/server.log" 2>/dev/null \
+            | sed 's/.*txlife //' | tail -9 | \
+            while read -r line; do echo "::error::far ${line:0:700}"; done || true
 
       - name: Did the server actually load the codec bundle?
         if: always()
