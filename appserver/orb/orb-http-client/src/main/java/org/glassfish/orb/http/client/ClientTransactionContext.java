@@ -35,7 +35,13 @@ import javax.transaction.xa.Xid;
  */
 public final class ClientTransactionContext {
 
-    private record Association(Xid xid, long timeoutSeconds) {
+    /**
+     * @param ambient true when the association was made by enlisting with a
+     *                transaction manager that is not this transport's - which
+     *                is also what makes it safe to drop when that manager's
+     *                transaction turns out to be over
+     */
+    private record Association(Xid xid, long timeoutSeconds, boolean ambient) {
     }
 
     private static final ThreadLocal<Association> CURRENT = new ThreadLocal<>();
@@ -56,11 +62,28 @@ public final class ClientTransactionContext {
     }
 
     public static void associate(Xid xid, long timeoutSeconds) {
+        associate(xid, timeoutSeconds, false);
+    }
+
+    /**
+     * Associates a branch and records where it came from.
+     *
+     * @param xid the branch
+     * @param timeoutSeconds the coordinator's remaining time, or 0
+     * @param ambient whether a foreign transaction manager asked for this
+     */
+    static void associate(Xid xid, long timeoutSeconds, boolean ambient) {
         if (xid == null) {
             disassociate();
         } else {
-            CURRENT.set(new Association(xid, timeoutSeconds));
+            CURRENT.set(new Association(xid, timeoutSeconds, ambient));
         }
+    }
+
+    /** @return true if this thread's branch was enlisted with a foreign manager */
+    static boolean isAmbient() {
+        Association association = CURRENT.get();
+        return association != null && association.ambient();
     }
 
     /**

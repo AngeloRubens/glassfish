@@ -58,7 +58,7 @@ public final class HttpXAResource implements XAResource {
     @Override
     public void start(Xid xid, int flags) throws XAException {
         if (flags == TMRESUME || flags == TMJOIN || flags == TMNOFLAGS) {
-            ClientTransactionContext.associate(xid, timeoutSeconds);
+            ClientTransactionContext.associate(xid, timeoutSeconds, true);
             return;
         }
         XAException e = new XAException("unsupported start flags: " + flags);

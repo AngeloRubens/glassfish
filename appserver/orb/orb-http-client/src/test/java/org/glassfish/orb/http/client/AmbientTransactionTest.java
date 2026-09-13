@@ -140,6 +140,46 @@ class AmbientTransactionTest {
         assertEquals(ours, ClientTransactionContext.current());
     }
 
+    @Test
+    @DisplayName("a branch left behind by a transaction that has ended is not carried into the next call")
+    void aStaleBranchIsDropped() {
+        FakeTransaction transaction = new FakeTransaction();
+        BOUND.put("java:comp/TransactionSynchronizationRegistry", new FakeRegistry(transaction));
+        BOUND.put("java:appserver/TransactionManager", new FakeManager(transaction));
+        AmbientTransaction.join(config, transport);
+        assertNotNull(ClientTransactionContext.current(), "the branch was never associated");
+
+        // The transaction ends, and the end that should have dropped the
+        // association never reaches the resource. That is not hypothetical:
+        // measured against two real servers, a call made deliberately outside
+        // a transaction arrived at the far server inside one, because the
+        // pooled request thread was still carrying this.
+        BOUND.put("java:comp/TransactionSynchronizationRegistry", new FakeRegistry(null));
+        BOUND.put("java:appserver/TransactionManager", new FakeManager(null));
+        AmbientTransaction.forget();
+
+        AmbientTransaction.join(config, transport);
+
+        assertNull(ClientTransactionContext.current(),
+                "a call outside a transaction must not carry the last one");
+    }
+
+    @Test
+    @DisplayName("a transaction begun through this transport is not dropped with it")
+    void ourOwnBranchSurvives() {
+        // Same shape - an association, and no container transaction - but this
+        // one is the application's own, begun through this transport's
+        // UserTransaction. Nothing here is entitled to end it.
+        Xid ours = new Xids.SimpleXid(1, new byte[] { 7 }, new byte[] { 7 });
+        ClientTransactionContext.associate(ours, 0);
+        BOUND.put("java:comp/TransactionSynchronizationRegistry", new FakeRegistry(null));
+        BOUND.put("java:appserver/TransactionManager", new FakeManager(null));
+
+        AmbientTransaction.join(config, transport);
+
+        assertEquals(ours, ClientTransactionContext.current());
+    }
+
     // ---- doubles ---------------------------------------------------------
 
     /** Binds the names this class looks up; everything else is absent. */

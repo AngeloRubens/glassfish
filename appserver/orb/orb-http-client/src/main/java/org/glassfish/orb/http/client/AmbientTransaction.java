@@ -103,14 +103,38 @@ final class AmbientTransaction {
      * @param transport how the branch will be driven
      */
     static void join(ClientConfiguration config, HttpTransport transport) {
-        if (ClientTransactionContext.current() != null || UNAVAILABLE.get()) {
-            // Already in a transaction this client knows about, or there is no
-            // transaction manager here to ask.
+        if (UNAVAILABLE.get()) {
+            // No transaction manager here to ask, and nothing this class did
+            // can be stale, because it never ran.
             return;
         }
 
         TransactionSynchronizationRegistry synchronizations = registry();
-        if (synchronizations == null || synchronizations.getTransactionKey() == null) {
+        if (synchronizations == null) {
+            // No container here, so there is nothing to join - and nothing to
+            // judge either: an association in a JVM with no transaction
+            // manager belongs to whoever made it.
+            return;
+        }
+        boolean inTransaction = synchronizations.getTransactionKey() != null;
+
+        if (ClientTransactionContext.current() != null) {
+            if (inTransaction || !ClientTransactionContext.isAmbient()) {
+                // Already in a transaction this client knows about: either the
+                // caller's, already joined, or one begun through this
+                // transport's own UserTransaction, which is not ours to drop.
+                return;
+            }
+            // A branch enlisted with the caller's manager is still on this
+            // thread, and the caller has no transaction any more. The end that
+            // should have dropped it never came - request threads are pooled,
+            // and the next call on this one would silently join a transaction
+            // that is already over, on a server that never agreed to it.
+            LOG.log(Level.DEBUG, "dropping a branch left on this thread by a transaction that has ended");
+            ClientTransactionContext.disassociate();
+        }
+
+        if (!inTransaction) {
             return;
         }
 
