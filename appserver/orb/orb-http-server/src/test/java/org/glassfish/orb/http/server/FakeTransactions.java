@@ -97,6 +97,11 @@ final class FakeTransactions implements TransactionBridge {
     }
 
     @Override
+    public void detach() {
+        record("detach");
+    }
+
+    @Override
     public void beforeCompletion(Xid xid) throws TransactionException {
         record("beforeCompletion");
         maybeFail("beforeCompletion");

@@ -339,6 +339,10 @@ public final class EjbDispatcher {
     private Xid importTransaction(TxContext txContext, ServerExchange exchange)
             throws TransactionBridge.TransactionException {
         if (!txContext.isPresent()) {
+            // Deliberately outside a transaction, so make that true: this
+            // thread has served other requests, and one of them may have left
+            // a branch on it.
+            transactions.detach();
             return null;
         }
         Xid xid = Xids.fromContext(txContext);

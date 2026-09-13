@@ -88,6 +88,21 @@ public interface TransactionBridge {
     /** Disassociates the transaction imported by {@link #recreate}. */
     void release(Xid xid) throws TransactionException;
 
+    /**
+     * Leaves this thread with no transaction on it.
+     *
+     * <p>Called before an invocation that carries none. Request threads are
+     * pooled, and a branch one of them was left holding would otherwise become
+     * the transaction of whatever ran next: a call made deliberately outside a
+     * transaction would answer with someone else's, and commit or roll back
+     * with it. It costs a method call to make that impossible.
+     *
+     * <p>Does nothing by default, for bridges with no thread association to
+     * clear.
+     */
+    default void detach() {
+    }
+
     // ---- this server as a branch of the caller's transaction ---------------
 
     /** Runs the {@code beforeCompletion} synchronizations for the branch. */

@@ -132,9 +132,15 @@ class HttpTransactionRoundTripTest {
     }
 
     @Test
+    @DisplayName("an invocation outside a transaction imports none - and clears any left on the thread")
     void anInvocationOutsideATransactionCarriesNone() {
         assertEquals("Ada", greeter().greet("Ada", 1));
-        assertEquals(List.of(), transactions.calls);
+        // detach and nothing else: no branch is imported, and the thread is
+        // made to match what the caller asked for. A request thread is pooled,
+        // so a branch an earlier request left on it would become this
+        // invocation's transaction - which is how a call made deliberately
+        // outside a transaction came to report someone else's.
+        assertEquals(List.of("detach"), transactions.calls);
     }
 
     @Test
