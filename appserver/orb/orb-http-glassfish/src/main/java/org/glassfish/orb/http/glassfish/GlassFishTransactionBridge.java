@@ -162,8 +162,6 @@ public class GlassFishTransactionBridge implements TransactionBridge {
             discard(xid);
             throw failure("prepare failed for " + Xids.key(xid), e.errorCode, e);
         }
-        if (vote == XAResource.XA_RDONLY) {
-        }
         return vote;
     }
 
@@ -303,12 +301,26 @@ public class GlassFishTransactionBridge implements TransactionBridge {
         return new Xids.SimpleXid(FORMAT_ID, global, new byte[] { 1 });
     }
 
+    /**
+     * The terminator, on a thread fit to drive one.
+     *
+     * <p>The detach is not tidiness. A terminator drives a branch from
+     * outside it, and a thread carrying a transaction of its own is not
+     * outside anything: measured against a real server, a prepare from such a
+     * thread is refused with {@code XAER_PROTO} while the branch being
+     * prepared is perfectly healthy. These are pooled request threads and a
+     * commit arrives on whichever one is free, so the failure lands on a
+     * different scenario each run - which is how it was found.
+     *
+     * @return the manager's terminator
+     */
     private XATerminator terminator() throws TransactionException {
         XATerminator terminator = transactions == null ? null : transactions.getXATerminator();
         if (terminator == null) {
             throw new TransactionException("this server has no transaction manager to drive",
                     XAException.XAER_RMFAIL);
         }
+        detach();
         return terminator;
     }
 
