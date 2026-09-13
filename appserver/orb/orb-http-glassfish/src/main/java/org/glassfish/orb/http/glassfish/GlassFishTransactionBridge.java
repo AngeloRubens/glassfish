@@ -93,9 +93,27 @@ public class GlassFishTransactionBridge implements TransactionBridge {
         try {
             transactions.recreate(xid, timeoutSeconds);
         } catch (Exception e) {
+            trace("recreate", xid, e);
             throw failure("cannot recreate " + Xids.key(xid), XAException.XAER_RMERR, e);
         }
+        trace("recreate", xid, null);
         watchOutcome(xid);
+    }
+
+    /**
+     * One line per transaction operation, with its outcome.
+     *
+     * <p>Six attempts at one guarantee were spent inferring what the sequence
+     * was from which test failed. This says it outright, which is cheaper than
+     * another theory.
+     *
+     * @param operation what was attempted
+     * @param xid which branch
+     * @param failure what went wrong, or null
+     */
+    private static void trace(String operation, Xid xid, Throwable failure) {
+        LOG.log(Level.INFO, "txop " + operation + ' ' + Xids.key(xid)
+                + (failure == null ? " -> ok" : " -> FAILED " + failure));
     }
 
     /**
@@ -209,8 +227,11 @@ public class GlassFishTransactionBridge implements TransactionBridge {
         try {
             terminator().commit(xid, onePhase);
         } catch (XAException e) {
+            trace("commit(xa,onePhase=" + onePhase + ")", xid, e);
             throw failure("commit failed for " + Xids.key(xid), e.errorCode, e);
         }
+        trace("commit(xa,onePhase=" + onePhase + ") listenerSaysRolledBack="
+                + ROLLED_BACK.contains(Xids.key(xid)), xid, null);
     }
 
     @Override
@@ -218,8 +239,10 @@ public class GlassFishTransactionBridge implements TransactionBridge {
         try {
             terminator().rollback(xid);
         } catch (XAException e) {
+            trace("rollback(xa)", xid, e);
             throw failure("rollback failed for " + Xids.key(xid), e.errorCode, e);
         }
+        trace("rollback(xa)", xid, null);
     }
 
     @Override
@@ -290,6 +313,7 @@ public class GlassFishTransactionBridge implements TransactionBridge {
                     XAException.XA_RBROLLBACK);
         }
 
+        trace("commitUserTransaction", xid, null);
         commit(xid, true);
 
         if (ROLLED_BACK.remove(key)) {
@@ -304,6 +328,8 @@ public class GlassFishTransactionBridge implements TransactionBridge {
     @Override
     public void rollbackUserTransaction(Xid xid) throws TransactionException {
         String key = Xids.key(xid);
+        trace("rollbackUserTransaction listenerSaysRolledBack="
+                + ROLLED_BACK.contains(key), xid, null);
         WATCHED.remove(key);
         if (ROLLED_BACK.remove(key)) {
             // Already rolled back by the server. The caller asked for exactly
