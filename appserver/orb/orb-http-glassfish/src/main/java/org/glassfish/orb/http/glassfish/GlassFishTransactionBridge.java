@@ -22,15 +22,12 @@ import com.sun.enterprise.transaction.api.JavaEETransactionManager;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.resource.spi.XATerminator;
-import jakarta.transaction.Status;
-import jakarta.transaction.Synchronization;
 
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
 import java.nio.ByteBuffer;
 import java.security.SecureRandom;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -73,19 +70,6 @@ public class GlassFishTransactionBridge implements TransactionBridge {
 
     private final AtomicLong sequence = new AtomicLong();
 
-    /** Branches already being listened to, so one listener is registered per branch. */
-    private static final Set<String> WATCHED = ConcurrentHashMap.newKeySet();
-
-    /**
-     * Branches the manager reported rolled back.
-     * <p>
-     * Entries are removed when the client resolves the transaction. One
-     * abandoned by a client that never commits or rolls back would stay, which
-     * is a small leak in an already exceptional case, and the alternative -
-     * forgetting the decision - would let a later commit succeed.
-     */
-    private static final Set<String> ROLLED_BACK = ConcurrentHashMap.newKeySet();
-
     @Inject
     private JavaEETransactionManager transactions;
 
@@ -98,7 +82,6 @@ public class GlassFishTransactionBridge implements TransactionBridge {
             throw failure("cannot recreate " + Xids.key(xid), XAException.XAER_RMERR, e);
         }
         trace("recreate", xid, null);
-        watchOutcome(xid);
     }
 
     /**
@@ -135,64 +118,13 @@ public class GlassFishTransactionBridge implements TransactionBridge {
         String key = Xids.key(xid);
         StringBuilder history = HISTORY.remove(key);
         LOG.log(Level.INFO, "txlife " + key + " [" + (history == null ? "" : history.toString().trim())
-                + "] listener=" + ROLLED_BACK.contains(key) + " end=" + ending);
+                + "] end=" + ending);
     }
 
     private static String shortName(Throwable t) {
         String name = t.getClass().getSimpleName();
         String message = t.getMessage();
         return name + (message == null ? "" : "(" + message.replace('\n', ' ') + ")");
-    }
-
-    /**
-     * Asks to be told how this branch ends.
-     *
-     * <p>A bean can mark the caller's transaction for rollback, and the caller
-     * has no way to learn that: reading the status from the dispatch thread
-     * does not work - the container has taken the branch off the thread by the
-     * time the invocation returns - and asking the manager during the call
-     * disturbs the branch enough to break the next one. Both were tried.
-     *
-     * <p>So nothing is asked. A synchronization is registered once, while the
-     * branch is on the thread where registering is legal, and the manager
-     * reports the outcome when it reaches one. If the branch is rolled back,
-     * a later commit for it is refused instead of being reported as success.
-     *
-     * <p>Safe by construction: this only listens. If the manager never calls
-     * back, nothing is recorded and the behaviour is exactly what it was.
-     *
-     * @param xid the branch just imported
-     */
-    private void watchOutcome(Xid xid) {
-        String key = Xids.key(xid);
-        if (!WATCHED.add(key)) {
-            // recreate runs per invocation and the transaction outlives each
-            // one; registering again would add a second listener for the same
-            // branch.
-            return;
-        }
-        try {
-            transactions.registerSynchronization(new Synchronization() {
-
-                @Override
-                public void beforeCompletion() {
-                }
-
-                @Override
-                public void afterCompletion(int status) {
-                    WATCHED.remove(key);
-                    if (status == Status.STATUS_ROLLEDBACK || status == Status.STATUS_MARKED_ROLLBACK) {
-                        ROLLED_BACK.add(key);
-                        LOG.log(Level.INFO, "branch " + key + " ended rolled back");
-                    }
-                }
-            });
-        } catch (Exception e) {
-            WATCHED.remove(key);
-            // Not fatal: without the listener a rollback simply goes
-            // unreported, which is where this started.
-            LOG.log(Level.DEBUG, "could not watch the outcome of " + key, e);
-        }
     }
 
     @Override
@@ -218,9 +150,12 @@ public class GlassFishTransactionBridge implements TransactionBridge {
      * failure in one call reappearing as a failure in an unrelated one, which
      * is the hardest kind to trace back.
      */
-    private void detach() {
+    @Override
+    public void detach() {
         try {
-            transactions.suspend();
+            if (transactions != null && transactions.getTransaction() != null) {
+                transactions.suspend();
+            }
         } catch (Exception e) {
             // Nothing further to try, and throwing here would replace the real
             // failure with this one.
@@ -241,26 +176,99 @@ public class GlassFishTransactionBridge implements TransactionBridge {
     public void beforeCompletion(Xid xid) {
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>A branch that votes to roll back is finished: XA says the resource
+     * manager has already rolled it back and released it, so a coordinator
+     * that reads that vote will never call rollback for it. Measured against a
+     * real server, the branch is still here after such a vote and accepts a
+     * rollback - so it is rolled back here, and what the coordinator is
+     * entitled to assume becomes true.
+     */
     @Override
     public int prepare(Xid xid) throws TransactionException {
+        int vote;
         try {
-            return terminator().prepare(xid);
+            vote = terminator().prepare(xid);
         } catch (XAException e) {
+            discard(xid);
+            trace("prepare", xid, e);
+            traceEnd(xid, "refused at prepare");
             throw failure("prepare failed for " + Xids.key(xid), e.errorCode, e);
+        }
+        trace("prepare=" + vote, xid, null);
+        if (vote == XAResource.XA_RDONLY) {
+            traceEnd(xid, "read only");
+        }
+        return vote;
+    }
+
+    /**
+     * Rolls back a branch whose own prepare refused it, silently.
+     *
+     * <p>What the caller will be told is the refusal. A rollback that fails as
+     * well must not replace it, and there is nothing further to try.
+     *
+     * @param xid the branch that voted to roll back
+     */
+    private void discard(Xid xid) {
+        try {
+            terminator().rollback(xid);
+        } catch (Exception e) {
+            LOG.log(Level.DEBUG, "could not roll back " + Xids.key(xid)
+                    + " after its prepare refused it", e);
         }
     }
 
     @Override
     public void commit(Xid xid, boolean onePhase) throws TransactionException {
+        if (onePhase) {
+            commitOnePhase(xid);
+            return;
+        }
         try {
-            terminator().commit(xid, onePhase);
+            terminator().commit(xid, false);
         } catch (XAException e) {
-            trace("commit(onePhase=" + onePhase + ")", xid, e);
+            trace("commit", xid, e);
             traceEnd(xid, "commit failed");
             throw failure("commit failed for " + Xids.key(xid), e.errorCode, e);
         }
-        trace("commit(onePhase=" + onePhase + ")", xid, null);
+        trace("commit", xid, null);
         traceEnd(xid, "committed");
+    }
+
+    /**
+     * Commits a branch this server is the only participant in - by preparing
+     * it first.
+     *
+     * <p>Not with a one-phase commit, which is the obvious way and the wrong
+     * one. Measured against a real server: a branch a bean marked for rollback
+     * is <em>accepted</em> by a one-phase commit through the terminator, with
+     * no error raised and no work committed. The mark is honoured and the
+     * caller is told the opposite. The same branch is refused by prepare, with
+     * XA_RBROLLBACK.
+     *
+     * <p>So the vote is asked for even though there is nobody to disagree with
+     * it. A resource manager may always do that with its own branch: one phase
+     * is an optimisation, and giving it up costs nothing when both halves are
+     * local. What it buys is the only truthful answer available.
+     *
+     * <p>It is also what carries a decision taken on a third server back to
+     * the client. A bean here that called on to another server enlisted that
+     * server as a branch of this transaction; preparing reaches it, its vote
+     * comes back, and a rollback decided there refuses the commit here.
+     *
+     * @param xid the branch to resolve
+     */
+    private void commitOnePhase(Xid xid) throws TransactionException {
+        if (prepare(xid) == XAResource.XA_RDONLY) {
+            // Nothing durable in this branch, and prepare has already ended
+            // it. Committing after a read-only vote is a protocol error, and
+            // the server answers it as one.
+            return;
+        }
+        commit(xid, false);
     }
 
     @Override
@@ -316,57 +324,20 @@ public class GlassFishTransactionBridge implements TransactionBridge {
     /**
      * {@inheritDoc}
      *
-     * <p>One phase: this server is the only resource manager in a transaction
-     * the client began here, so there is nobody to agree with and a prepare
-     * would be a round trip spent asking ourselves.
-     */
-    /**
-     * {@inheritDoc}
-     *
-     * <p>Asks the listener after committing, not before. The commit is what
-     * drives the branch to an outcome, so before it there is nothing for a
-     * listener to have heard - which is why consulting it first found nothing
-     * and let every marked transaction through.
-     *
-     * <p>Measured against a real server with the bean deployed and called:
-     * a branch a bean marked reports ROLLEDBACK to the listener and a clean
-     * one reports COMMITTED, in both cases while the commit is running. The
-     * work is not committed against the mark; what was wrong was only what
-     * the caller was told about it.
+     * <p>This server is the only participant the client knows of, so there is
+     * nobody to run a two-phase exchange with - but the vote is still asked
+     * for, for the reason {@link #commitOnePhase} gives: it is the only place
+     * the server tells the truth about a branch a bean marked for rollback.
      */
     @Override
     public void commitUserTransaction(Xid xid) throws TransactionException {
-        String key = Xids.key(xid);
-        if (ROLLED_BACK.remove(key)) {
-            // Already resolved before the request arrived - a timeout, or a
-            // rollback from elsewhere.
-            throw new TransactionException("the transaction was rolled back: " + key,
-                    XAException.XA_RBROLLBACK);
-        }
-
         trace("commitUT", xid, null);
-        commit(xid, true);
-
-        if (ROLLED_BACK.remove(key)) {
-            // The manager drove this branch to a rollback while committing it,
-            // because a bean had marked it. Reporting success would tell the
-            // caller its work is durable when it has just been discarded.
-            throw new TransactionException("the transaction was marked for rollback"
-                    + " and was rolled back: " + key, XAException.XA_RBROLLBACK);
-        }
+        commitOnePhase(xid);
     }
 
     @Override
     public void rollbackUserTransaction(Xid xid) throws TransactionException {
-        String key = Xids.key(xid);
         trace("rollbackUT", xid, null);
-        WATCHED.remove(key);
-        if (ROLLED_BACK.remove(key)) {
-            // Already rolled back by the server. The caller asked for exactly
-            // that, so this succeeded; asking the manager again would fail on
-            // a branch that is gone and report a problem where there is none.
-            return;
-        }
         rollback(xid);
     }
 
