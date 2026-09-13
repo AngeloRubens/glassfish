@@ -266,6 +266,26 @@ public class GlassFishTransactionBridge implements TransactionBridge {
      * the client began here, so there is nobody to agree with and a prepare
      * would be a round trip spent asking ourselves.
      */
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Commits, and then makes sure the commit meant something.
+     *
+     * <p>A branch a bean marked for rollback takes the commit without
+     * complaint and without doing anything: measured against a real server,
+     * the enlisted resource is told nothing, no completion is reported, and
+     * the branch is still there afterwards - holding whatever it holds until
+     * it times out. The caller meanwhile has been told its work is durable.
+     *
+     * <p>Asking for a rollback afterwards separates the two cases. It is
+     * refused when the commit was real, and accepted when a branch was still
+     * sitting there, which both reveals the truth and resolves it - the
+     * resource is rolled back and its locks released rather than held.
+     *
+     * <p>Only operations the contract defines, which is the rule four earlier
+     * attempts broke: reading the branch's status during a call, before a
+     * commit, and preparing it all disturbed the ordinary path.
+     */
     @Override
     public void commitUserTransaction(Xid xid) throws TransactionException {
         String key = Xids.key(xid);
@@ -275,7 +295,20 @@ public class GlassFishTransactionBridge implements TransactionBridge {
             throw new TransactionException("the transaction was rolled back: " + key,
                     XAException.XA_RBROLLBACK);
         }
+
         commit(xid, true);
+
+        try {
+            terminator().rollback(xid);
+        } catch (TransactionException | XAException e) {
+            // Nothing left to roll back: the commit was real, and this is the
+            // ordinary path.
+            return;
+        }
+        // There was still a branch, so the commit did nothing. It is resolved
+        // now, and the caller has to hear that rather than a success.
+        throw new TransactionException("the transaction was marked for rollback"
+                + " and has been rolled back: " + key, XAException.XA_RBROLLBACK);
     }
 
     @Override
