@@ -10,6 +10,10 @@ import java.util.Hashtable;
 
 import javax.naming.Context;
 import javax.naming.InitialContext;
+import javax.transaction.xa.Xid;
+
+import org.glassfish.orb.http.client.ClientTransactionContext;
+import org.glassfish.orb.http.protocol.Xids;
 
 /**
  * Calls the second server over the same transport a client would use.
@@ -58,12 +62,22 @@ public class RelayBean implements Relay {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Three answers, not one: what this server thinks it is in, what the
+     * transport thinks this thread is in, and what the far server saw. When
+     * the far server reports a transaction nobody sent it, which of the three
+     * is lying is the whole question, and one of them has to be asked here.
+     */
     @Override
     @TransactionAttribute(TransactionAttributeType.SUPPORTS)
     public String remoteTransaction() {
         try {
+            Xid carried = ClientTransactionContext.current();
             String key = far().transactionKey();
-            return key == null ? "none" : key;
+            return here() + '|' + (carried == null ? "none" : Xids.key(carried))
+                    + '|' + (key == null ? "none" : key);
         } catch (Throwable t) {
             return error(t);
         }

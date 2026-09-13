@@ -134,7 +134,7 @@ public class GlassFishTransactionBridge implements TransactionBridge {
         } catch (Exception e) {
             throw failure("cannot release " + Xids.key(xid), XAException.XAER_RMERR, e);
         } finally {
-            detach();
+            suspendQuietly();
         }
     }
 
@@ -152,14 +152,40 @@ public class GlassFishTransactionBridge implements TransactionBridge {
      */
     @Override
     public void detach() {
+        Object stray = current();
+        if (stray != null) {
+            // Worth a line: the caller has just said this thread should have
+            // no transaction, and it had one. Either an earlier request left
+            // it, or this one carried one nobody declared.
+            LOG.log(Level.INFO, "txstray took a transaction off this thread: " + stray);
+        }
+        suspendQuietly();
+    }
+
+    /**
+     * Takes whatever is on this thread off it, and says nothing.
+     *
+     * <p>Used after releasing a branch, where finding a transaction is the
+     * ordinary case rather than something to report.
+     */
+    private void suspendQuietly() {
         try {
-            if (transactions != null && transactions.getTransaction() != null) {
+            if (current() != null) {
                 transactions.suspend();
             }
         } catch (Exception e) {
             // Nothing further to try, and throwing here would replace the real
             // failure with this one.
             LOG.log(Level.WARNING, "could not detach the transaction from this thread", e);
+        }
+    }
+
+    /** @return the transaction on this thread, or null - never throwing */
+    private Object current() {
+        try {
+            return transactions == null ? null : transactions.getTransaction();
+        } catch (Exception e) {
+            return null;
         }
     }
 

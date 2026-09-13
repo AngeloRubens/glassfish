@@ -216,8 +216,15 @@ public final class HttpBaseline {
 
         failures += check("with no transaction, the second hop runs without one either", () -> {
             String answer = relay.remoteTransaction();
-            if (!"none".equals(answer)) {
-                throw new IllegalStateException("expected no transaction, got: " + answer);
+            System.out.println("        relay said: " + answer);
+            String[] parts = answer.split("\\|", -1);
+            if (parts.length != 3) {
+                throw new IllegalStateException("unreadable answer: " + answer);
+            }
+            if (!"none".equals(parts[2])) {
+                throw new IllegalStateException("the second hop ran in a transaction:"
+                        + " first server=" + parts[0] + " carried=" + parts[1]
+                        + " second server=" + parts[2]);
             }
         });
 

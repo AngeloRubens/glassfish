@@ -458,6 +458,17 @@ jobs:
       # A separate step on purpose: the ten-annotation limit is per step, and
       # the two servers' accounts of the same transaction are what makes the
       # second hop readable at all.
+      # A thread that came back from the pool still holding a transaction is
+      # how a call made deliberately outside one comes to report another's.
+      - name: Transactions found on threads that should have had none
+        if: always()
+        run: |
+          grep -h "txstray " \
+            "$GLASSFISH_HOME/glassfish/domains/domain1/logs/server.log" \
+            "$GLASSFISH_HOME/glassfish/domains/domain2/logs/server.log" 2>/dev/null \
+            | sed 's/.*txstray //' | tail -8 | \
+            while read -r line; do echo "::error::txstray ${line:0:400}"; done || true
+
       - name: The life of each transaction, on the server it calls
         if: always()
         run: |
