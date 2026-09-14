@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
+import javax.transaction.xa.Xid;
 
 /**
  * Joins a transaction this client did not start.
@@ -68,6 +69,16 @@ final class AmbientTransaction {
             "java:jboss/TransactionManager");
 
     private static final String REGISTRY_NAME = "java:comp/TransactionSynchronizationRegistry";
+
+    /**
+     * The branch the caller's manager started for one endpoint, kept with the
+     * transaction it belongs to rather than with the thread.
+     *
+     * @param xid            the branch, or null if the manager has not started it
+     * @param timeoutSeconds the coordinator's remaining time when it did
+     */
+    private record Joined(Xid xid, long timeoutSeconds) {
+    }
 
     /** Set once we know this JVM has no transaction manager to join. */
     private static final AtomicBoolean UNAVAILABLE = new AtomicBoolean();
@@ -116,32 +127,44 @@ final class AmbientTransaction {
             // manager belongs to whoever made it.
             return;
         }
-        boolean inTransaction = synchronizations.getTransactionKey() != null;
+        if (ClientTransactionContext.current() != null && !ClientTransactionContext.isAmbient()) {
+            // Begun through this transport's own UserTransaction: not ours to
+            // judge, and not ours to replace.
+            return;
+        }
 
-        if (ClientTransactionContext.current() != null) {
-            if (inTransaction || !ClientTransactionContext.isAmbient()) {
-                // Already in a transaction this client knows about: either the
-                // caller's, already joined, or one begun through this
-                // transport's own UserTransaction, which is not ours to drop.
-                return;
+        if (synchronizations.getTransactionKey() == null) {
+            if (ClientTransactionContext.current() != null) {
+                // A branch enlisted with the caller's manager is still on this
+                // thread, and the caller has no transaction any more. The end
+                // that should have dropped it never came - request threads are
+                // pooled, and the next call on this one would silently join a
+                // transaction that is already over.
+                LOG.log(Level.DEBUG, "dropping a branch left on this thread by a transaction that has ended");
+                ClientTransactionContext.disassociate();
             }
-            // A branch enlisted with the caller's manager is still on this
-            // thread, and the caller has no transaction any more. The end that
-            // should have dropped it never came - request threads are pooled,
-            // and the next call on this one would silently join a transaction
-            // that is already over, on a server that never agreed to it.
-            LOG.log(Level.DEBUG, "dropping a branch left on this thread by a transaction that has ended");
-            ClientTransactionContext.disassociate();
-        }
-
-        if (!inTransaction) {
             return;
         }
 
+        // A transaction is active, and the branch to carry is the one enlisted
+        // for this endpoint in this transaction - never whatever the thread
+        // happens to hold. Trusting the thread was the previous version, and
+        // it failed exactly when a pooled thread went from one transaction
+        // straight into the next: the new call carried the old, finished
+        // branch, the new transaction never enlisted the far server, and a
+        // rollback decided there was committed here.
         String marker = AmbientTransaction.class.getName() + ':' + config.baseUri();
-        if (synchronizations.getResource(marker) != null) {
+        if (synchronizations.getResource(marker) instanceof Joined joined) {
+            if (joined.xid() != null) {
+                // Also what keeps two endpoints in one transaction apart: each
+                // call puts back its own endpoint's branch.
+                ClientTransactionContext.associate(joined.xid(), joined.timeoutSeconds(), true);
+            }
             return;
         }
+        // Not joined in this transaction yet, so anything on the thread
+        // belongs to another one.
+        ClientTransactionContext.disassociate();
 
         try {
             TransactionManager transactions = manager();
@@ -157,7 +180,10 @@ final class AmbientTransaction {
             // Enlisting is what makes the server a participant: the caller's
             // coordinator will drive prepare and commit on this resource.
             current.enlistResource(new HttpXAResource(config, transport));
-            synchronizations.putResource(marker, Boolean.TRUE);
+            // The manager starts the branch while enlisting, which associates
+            // it; keep it with the transaction so later calls can put it back.
+            synchronizations.putResource(marker, new Joined(ClientTransactionContext.current(),
+                    ClientTransactionContext.currentTimeoutSeconds()));
         } catch (Exception e) {
             // Not fatal to the invocation, and deliberately loud: a call that
             // silently leaves its transaction behind is worse than one that

@@ -41,6 +41,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
@@ -57,6 +58,8 @@ class AmbientTransactionTest {
     static final Map<String, Object> BOUND = new HashMap<>();
 
     static Xid started;
+
+    static int branches;
 
     private ClientConfiguration config;
 
@@ -180,6 +183,53 @@ class AmbientTransactionTest {
         assertEquals(ours, ClientTransactionContext.current());
     }
 
+    @Test
+    @DisplayName("a thread going straight into a new transaction does not carry the last one's branch")
+    void aBranchFromTheLastTransactionIsNotReused() {
+        FakeTransaction first = new FakeTransaction();
+        BOUND.put("java:comp/TransactionSynchronizationRegistry", new FakeRegistry(first));
+        BOUND.put("java:appserver/TransactionManager", new FakeManager(first));
+        AmbientTransaction.join(config, transport);
+        Xid old = ClientTransactionContext.current();
+
+        // The first transaction ends without end() reaching the resource, and
+        // the same pooled thread runs a bean in a second one. Measured against
+        // two real servers: the call carried the old branch, the second
+        // transaction never enlisted the far server, and a rollback decided
+        // there was committed here.
+        FakeTransaction second = new FakeTransaction();
+        BOUND.put("java:comp/TransactionSynchronizationRegistry", new FakeRegistry(second));
+        BOUND.put("java:appserver/TransactionManager", new FakeManager(second));
+        AmbientTransaction.forget();
+
+        AmbientTransaction.join(config, transport);
+
+        assertEquals(1, second.enlisted, "the new transaction must enlist the endpoint itself");
+        assertEquals(started, ClientTransactionContext.current(), "the call must carry the new branch");
+        assertNotEquals(Xids.key(old), Xids.key(ClientTransactionContext.current()));
+    }
+
+    @Test
+    @DisplayName("two endpoints in one transaction each carry their own branch")
+    void eachEndpointCarriesItsOwnBranch() {
+        FakeTransaction transaction = new FakeTransaction();
+        BOUND.put("java:comp/TransactionSynchronizationRegistry", new FakeRegistry(transaction));
+        BOUND.put("java:appserver/TransactionManager", new FakeManager(transaction));
+        ClientConfiguration other = ClientConfiguration
+                .builder(URI.create("http://elsewhere:8080/glassfish-services")).build();
+
+        AmbientTransaction.join(config, transport);
+        Xid here = ClientTransactionContext.current();
+        AmbientTransaction.join(other, transport);
+        Xid there = ClientTransactionContext.current();
+        AmbientTransaction.join(config, transport);
+
+        assertEquals(2, transaction.enlisted);
+        assertNotEquals(Xids.key(here), Xids.key(there));
+        assertEquals(Xids.key(here), Xids.key(ClientTransactionContext.current()),
+                "back on the first endpoint, the call must carry the first endpoint's branch");
+    }
+
     // ---- doubles ---------------------------------------------------------
 
     /** Binds the names this class looks up; everything else is absent. */
@@ -214,7 +264,9 @@ class AmbientTransactionTest {
             try {
                 // What a real manager does next, and what associates the
                 // branch on this side.
-                Xid xid = new Xids.SimpleXid(0x4A5441, new byte[] { 1, 2 }, new byte[] { 3 });
+                // A new branch per enlistment, as a real manager mints them;
+                // a fixed one would make a stale branch look current.
+                Xid xid = new Xids.SimpleXid(0x4A5441, new byte[] { 1, (byte) ++branches }, new byte[] { 3 });
                 resource.start(xid, XAResource.TMNOFLAGS);
                 started = xid;
             } catch (Exception e) {
