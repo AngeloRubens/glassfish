@@ -16,7 +16,6 @@
 
 package org.glassfish.orb.http.client;
 
-
 import jakarta.transaction.HeuristicMixedException;
 import jakarta.transaction.HeuristicRollbackException;
 import jakarta.transaction.NotSupportedException;

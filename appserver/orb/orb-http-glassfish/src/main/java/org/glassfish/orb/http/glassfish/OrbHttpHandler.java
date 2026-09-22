@@ -16,7 +16,6 @@
 
 package org.glassfish.orb.http.glassfish;
 
-
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
 

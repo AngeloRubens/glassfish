@@ -16,7 +16,6 @@
 
 package org.glassfish.orb.http.protocol;
 
-
 import java.util.Random;
 
 import javax.transaction.xa.Xid;

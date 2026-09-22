@@ -16,7 +16,6 @@
 
 package org.glassfish.orb.http.server;
 
-
 import jakarta.transaction.RollbackException;
 import jakarta.transaction.Status;
 

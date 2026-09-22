@@ -16,7 +16,6 @@
 
 package org.glassfish.orb.http.server;
 
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;

@@ -16,7 +16,6 @@
 
 package org.glassfish.orb.http.glassfish;
 
-
 import com.sun.enterprise.v3.services.impl.GrizzlyService;
 
 import jakarta.inject.Inject;

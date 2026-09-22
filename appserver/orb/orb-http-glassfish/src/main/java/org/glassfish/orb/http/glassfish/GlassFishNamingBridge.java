@@ -16,8 +16,6 @@
 
 package org.glassfish.orb.http.glassfish;
 
-
-
 import com.sun.ejb.containers.EjbContainerUtilImpl;
 import com.sun.enterprise.naming.impl.ProviderManager;
 import com.sun.enterprise.naming.impl.SerialContextProvider;

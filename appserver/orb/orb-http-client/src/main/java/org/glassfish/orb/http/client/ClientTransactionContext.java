@@ -16,7 +16,6 @@
 
 package org.glassfish.orb.http.client;
 
-
 import javax.transaction.xa.Xid;
 
 /**
