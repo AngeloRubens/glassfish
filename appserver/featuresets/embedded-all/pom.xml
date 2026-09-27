@@ -178,7 +178,31 @@
             <artifactId>orb-iiop</artifactId>
             <version>${project.version}</version>
         </dependency>
-                                                <!-- glassfish-jmx -->
+
+        <!-- Bisecting: the passive modules only. orb-http-glassfish, which
+             registers the run-level service that mounts the endpoint, is
+             deliberately left out of this run. -->
+        <dependency>
+            <groupId>org.glassfish.main.orb</groupId>
+            <artifactId>orb-http-protocol</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.glassfish.main.orb</groupId>
+            <artifactId>orb-http-client</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.glassfish.main.orb</groupId>
+            <artifactId>orb-http-server</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.glassfish.main.orb</groupId>
+            <artifactId>orb-http-fory-grpc</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- glassfish-jmx -->
         <dependency>
             <groupId>org.glassfish.main.common</groupId>
             <artifactId>glassfish-mbeanserver</artifactId>
