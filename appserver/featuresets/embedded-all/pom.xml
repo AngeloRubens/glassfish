@@ -198,11 +198,11 @@
             <artifactId>orb-http-glassfish</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <dependency>
-            <groupId>org.glassfish.main.orb</groupId>
-            <artifactId>orb-http-codec-fory</artifactId>
-            <version>${project.version}</version>
-        </dependency>
+        <!-- Explicit, though orb-http-glassfish also brings it: its manifest
+             imports this bundle's package, and the distribution not carrying
+             it is what stopped the server from starting. Not the Fory codec
+             here: both bundles embed fory-core under the same name, and the
+             embedded distribution flattens them into one jar. -->
         <dependency>
             <groupId>org.glassfish.main.orb</groupId>
             <artifactId>orb-http-fory-grpc</artifactId>
