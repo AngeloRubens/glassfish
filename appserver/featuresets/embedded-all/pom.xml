@@ -198,6 +198,16 @@
             <artifactId>orb-http-glassfish</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.glassfish.main.orb</groupId>
+            <artifactId>orb-http-codec-fory</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.glassfish.main.orb</groupId>
+            <artifactId>orb-http-fory-grpc</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
 
         <!-- glassfish-jmx -->

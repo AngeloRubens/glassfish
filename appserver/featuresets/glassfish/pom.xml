@@ -223,6 +223,31 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        <!-- The Fory codec, discovered at runtime, and the Fory gRPC bridge,
+             whose package orb-http-glassfish imports: without this one the
+             container bundle does not resolve and the server does not start. -->
+        <dependency>
+            <groupId>org.glassfish.main.orb</groupId>
+            <artifactId>orb-http-codec-fory</artifactId>
+            <version>${project.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.glassfish.main.orb</groupId>
+            <artifactId>orb-http-fory-grpc</artifactId>
+            <version>${project.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
         <!-- Jakarta Enterprise Beans - Container Managed Persistence (for compatibiliy, don't use) -->
         <dependency>
             <groupId>org.glassfish.main.persistence.cmp</groupId>
