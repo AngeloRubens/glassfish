@@ -8,7 +8,12 @@ name: Full reactor build (diagnostic)
 # checkstyle is left on, because the Jenkins job that reports the failure runs
 # it and the GitHub one skips it.
 
+# A push trigger rather than workflow_dispatch: dispatching by file name needs
+# the workflow to exist on the fork's default branch, and this one deliberately
+# does not go there.
 on:
+  push:
+    branches: [ 'ci/full-build-check' ]
   workflow_dispatch:
     inputs:
       tests:
