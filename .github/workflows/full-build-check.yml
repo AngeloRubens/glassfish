@@ -1,0 +1,50 @@
+name: Full reactor build (PR 26215)
+
+# Not for upstream. This branch exists on the fork only, to answer a question
+# the Eclipse CI reports but does not let me read: what fails when the whole
+# project is built with these changes in it.
+#
+# Same command the project's own Ubuntu build uses, with one difference -
+# checkstyle is left on, because the Jenkins job that reports the failure runs
+# it and the GitHub one skips it.
+
+# A push trigger rather than workflow_dispatch: dispatching by file name needs
+# the workflow to exist on the fork's default branch, and this one deliberately
+# does not go there.
+on:
+  push:
+    branches: [ 'ci/full-build-26215' ]
+  workflow_dispatch:
+    inputs:
+      tests:
+        description: "Run tests as well (slow); empty means compile and checkstyle only"
+        default: ""
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+      - name: Build with Maven
+        run: |
+          if [ -n "${{ inputs.tests }}" ]; then
+            mvn -B -e -ntp install -Pqa,snapshots
+          else
+            mvn -B -e -ntp install -Pqa,snapshots -DskipTests
+          fi
+      - name: First failure
+        if: failure()
+        run: echo "see the step above; the reactor summary names the module"
+      - name: Server logs
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: server-logs
+          path: '**/server.log*'
+          retention-days: 3
