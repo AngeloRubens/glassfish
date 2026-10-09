@@ -9,7 +9,7 @@ name: Fory gRPC live call
 on:
   workflow_dispatch:
   push:
-    branches: [ 'feat/fory-grpc-ejb-idl' ]
+    branches: [ 'feat/fory-grpc-ejb-idl', 'ci/fory-grpc-invert' ]
     paths:
       - 'appserver/orb/**'
       - 'compatibility/**'

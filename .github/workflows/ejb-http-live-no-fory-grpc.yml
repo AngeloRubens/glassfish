@@ -1,4 +1,4 @@
-name: EJB over HTTP live call
+name: EJB over HTTP live call, without the Fory gRPC bridge
 
 # Proves the transport against a running server rather than against its parts.
 #
@@ -54,7 +54,7 @@ jobs:
       - name: Add the modules to the server
         run: |
           MODULES="$RUNNER_TEMP/gf/glassfish8/glassfish/modules"
-          for module in orb-http-protocol orb-http-server orb-http-client orb-http-codec-fory orb-http-fory-grpc orb-http-glassfish; do
+          for module in orb-http-protocol orb-http-server orb-http-client orb-http-codec-fory orb-http-glassfish; do
             jar=$(find "appserver/orb/$module/target" -maxdepth 1 -name '*.jar' ! -name '*sources*' ! -name 'original-*' | head -1)
             [ -n "$jar" ] || { echo "no jar built for $module"; exit 1; }
             cp -v "$jar" "$MODULES/$module.jar"
@@ -95,6 +95,17 @@ jobs:
             demo.client.EjbHttpLiveClient \
             -target http://localhost:8080/glassfish-services \
             -codec fory -name Ada -expect 'Hello Ada'
+
+      - name: The bridge is absent, and nothing else is
+        run: |
+          LOG="$RUNNER_TEMP/gf/glassfish8/glassfish/domains/domain1/logs/server.log"
+          [ ! -e "$RUNNER_TEMP/gf/glassfish8/glassfish/modules/orb-http-fory-grpc.jar" ]
+          grep -q "Remote EJB and JNDI over HTTP mounted" "$LOG" || { echo "endpoint not mounted"; exit 1; }
+          if grep -q "ForyGrpcExtension serves" "$LOG"; then echo "the bridge is not supposed to be here"; exit 1; fi
+          if grep -qE "could not mount|could not start" "$LOG"; then echo "a start failure was logged"; exit 1; fi
+          status=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/glassfish-services/.well-known/ejb/)
+          echo "IDL catalog without the bridge: HTTP $status"
+          [ "$status" != 200 ] || { echo "the catalog answered without the bridge"; exit 1; }
 
       - name: Server log
         if: always()

@@ -2,7 +2,7 @@ name: Fory gRPC cross-language code generation
 
 on:
   push:
-    branches: [ 'feat/fory-grpc-ejb-idl' ]
+    branches: [ 'feat/fory-grpc-ejb-idl', 'ci/fory-grpc-invert' ]
   pull_request:
     paths:
       - 'compatibility/fory-grpc/**'
