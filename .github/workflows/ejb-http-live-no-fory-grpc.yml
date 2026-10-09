@@ -15,13 +15,11 @@ name: EJB over HTTP live call, without the Fory gRPC bridge
 on:
   workflow_dispatch:
   push:
-    branches: [ 'ci/fory-grpc-invert' ]
-  push:
-    branches: [ 'feat/fory-grpc-ejb-idl' ]
+    branches: [ 'feat/fory-grpc-ejb-idl', 'ci/fory-grpc-invert' ]
     paths:
       - 'appserver/orb/**'
       - 'compatibility/**'
-      - '.github/workflows/ejb-http-live.yml'
+      - '.github/workflows/ejb-http-live-no-fory-grpc.yml'
 
 env:
   GLASSFISH_VERSION: 8.0.4

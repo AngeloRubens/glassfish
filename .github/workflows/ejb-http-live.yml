@@ -15,9 +15,7 @@ name: EJB over HTTP live call
 on:
   workflow_dispatch:
   push:
-    branches: [ 'ci/fory-grpc-invert' ]
-  push:
-    branches: [ 'feat/fory-grpc-ejb-idl' ]
+    branches: [ 'feat/fory-grpc-ejb-idl', 'ci/fory-grpc-invert' ]
     paths:
       - 'appserver/orb/**'
       - 'compatibility/**'
