@@ -240,7 +240,7 @@ public final class EjbDispatcher {
                 exchange.setResponseHeader(TransactionDispatcher.H_ERROR_CODE,
                         Integer.toString(e.errorCode()));
                 exchange.setResponseHeader("X-GF-Reason",
-                        String.valueOf(e.getMessage()).replace('\n', ' ').replace('\r', ' '));
+                        String.valueOf(e.getMessage()).replace('\n', ' '));
             } finally {
                 if (target != null) {
                     container.releaseTargetObject(target);

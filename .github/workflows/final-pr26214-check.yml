@@ -1,0 +1,43 @@
+name: Final PR 26214 check
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ 'check/final26214-revert-crlf' ]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Install Maven 3.9.16
+        run: |
+          curl -sSL -o "$RUNNER_TEMP/maven.tgz" https://archive.apache.org/dist/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.tar.gz
+          tar -xzf "$RUNNER_TEMP/maven.tgz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/apache-maven-3.9.16/bin" >> "$GITHUB_PATH"
+
+      - name: Build what the orb http modules depend on
+        run: |
+          mvn -v
+          mvn -B -ntp install -DskipTests -Dcheckstyle.skip -Dspotbugs.skip -Dcopyright.skip \
+            -pl appserver/orb/orb-http-protocol,appserver/orb/orb-http-client,appserver/orb/orb-http-codec-fory,appserver/orb/orb-http-server -am
+
+      - name: Build and test every orb http module, checkstyle enforced
+        run: |
+          set -o pipefail
+          mvn -B -ntp install -fae -Dmaven.test.failure.ignore=true \
+            -pl appserver/orb/orb-http-protocol,appserver/orb/orb-http-client,appserver/orb/orb-http-codec-fory,appserver/orb/orb-http-server \
+            2>&1 | tee build.log
+
+      - name: Test and checkstyle summary
+        if: always()
+        run: |
+          grep -hE 'Tests run:|FAIL|ERROR\]|WARN.*checkstyle|Reactor Summary|SUCCESS|BUILD' build.log | tail -150 || true
