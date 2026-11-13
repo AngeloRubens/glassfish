@@ -29,7 +29,7 @@ jobs:
           MODS=$(ls -d appserver/orb/orb-http-*/ | sed 's#/$##' | paste -sd,)
           echo "modules: $MODS"
           mvn -B -e -ntp -pl "$MODS" -am install -DskipTests
-          mvn -B -e -ntp -pl "$MODS" install -Dtrimstacktrace=false
+          mvn -B -e -ntp -pl "$MODS" install -fae -Dmaven.test.failure.ignore=true -Dtrimstacktrace=false
 
       - name: Summarize results
         if: always()
