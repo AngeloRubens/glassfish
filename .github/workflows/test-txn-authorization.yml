@@ -2,6 +2,8 @@ name: Transaction endpoint authorization tests
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ 'test/txn-authorization' ]
 
 jobs:
   test:
