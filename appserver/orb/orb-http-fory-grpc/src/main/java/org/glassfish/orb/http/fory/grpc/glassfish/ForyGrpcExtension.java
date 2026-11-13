@@ -100,7 +100,7 @@ public class ForyGrpcExtension implements OrbHttpExtension, PostConstruct {
                                 }
                             }
                         };
-                    } catch (RuntimeException | Error failure) {
+                    } catch (Exception | Error failure) {
                         security.clear(securityToken);
                         throw failure;
                     }
