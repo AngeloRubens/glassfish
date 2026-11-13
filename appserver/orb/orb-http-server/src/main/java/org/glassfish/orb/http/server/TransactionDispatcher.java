@@ -68,7 +68,17 @@ public final class TransactionDispatcher {
             return;
         }
 
-        Object securityToken = security.establish(exchange.authenticatedUser());
+        Object securityToken;
+        try {
+            securityToken = security.establish(exchange.authenticatedUser());
+        } catch (SecurityException e) {
+            // A credential the realm refused. Nothing was established, so
+            // there is nothing to clear, and the bridge is never reached. The
+            // reason is fixed: the exception text is the realm's, not the
+            // caller's to read.
+            fail(exchange, Protocol.SC_FORBIDDEN, "not authorized");
+            return;
+        }
         try {
             perform(exchange, request);
         } catch (TransactionBridge.TransactionException e) {

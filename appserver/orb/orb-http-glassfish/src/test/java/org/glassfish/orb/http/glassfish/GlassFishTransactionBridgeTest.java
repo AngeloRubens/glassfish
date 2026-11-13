@@ -20,6 +20,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import com.sun.enterprise.transaction.api.JavaEETransactionManager;
@@ -115,6 +116,78 @@ class GlassFishTransactionBridgeTest {
 
         assertEquals(XAException.XAER_NOTA, thrown.errorCode());
         assertTrue(terminatorCalls.isEmpty(), "terminator was called: " + terminatorCalls);
+    }
+
+    private static final Xid OWN = new Xids.SimpleXid(GlassFishTransactionBridge.formatId(),
+            new byte[] { 1, 2 }, new byte[] { 3 });
+
+    /** Wires a manager whose terminator records its calls and lists {@code listed} on recover. */
+    private void wire(List<String> terminatorCalls, Xid... listed) throws Exception {
+        XATerminator terminator = (XATerminator) Proxy.newProxyInstance(
+                getClass().getClassLoader(), new Class<?>[] { XATerminator.class },
+                (proxy, method, args) -> {
+                    terminatorCalls.add(method.getName());
+                    if (method.getName().equals("recover")) {
+                        return listed;
+                    }
+                    return method.getReturnType() == int.class ? Integer.valueOf(0) : null;
+                });
+        InvocationHandler managerHandler = (proxy, method, args) ->
+                method.getName().equals("getXATerminator") ? terminator : null;
+        JavaEETransactionManager manager = (JavaEETransactionManager) Proxy.newProxyInstance(
+                getClass().getClassLoader(), new Class<?>[] { JavaEETransactionManager.class }, managerHandler);
+        Field field = GlassFishTransactionBridge.class.getDeclaredField("transactions");
+        field.setAccessible(true);
+        field.set(bridge, manager);
+    }
+
+    private static void assertNotDriven(List<String> terminatorCalls, Executable operation) {
+        TransactionBridge.TransactionException thrown = assertThrows(
+                TransactionBridge.TransactionException.class, operation::run);
+        assertEquals(XAException.XAER_NOTA, thrown.errorCode());
+        assertTrue(terminatorCalls.isEmpty(), "terminator was called: " + terminatorCalls);
+    }
+
+    @Test
+    @DisplayName("prepare, commit, forget and the user-transaction ends refuse a foreign branch too")
+    void everyOperationRefusesAForeignXid() throws Exception {
+        List<String> terminatorCalls = new ArrayList<>();
+        wire(terminatorCalls);
+
+        assertNotDriven(terminatorCalls, () -> bridge.prepare(XID));
+        assertNotDriven(terminatorCalls, () -> bridge.commit(XID, false));
+        assertNotDriven(terminatorCalls, () -> bridge.commit(XID, true));
+        assertNotDriven(terminatorCalls, () -> bridge.forget(XID));
+        assertNotDriven(terminatorCalls, () -> bridge.commitUserTransaction(XID));
+        assertNotDriven(terminatorCalls, () -> bridge.rollbackUserTransaction(XID));
+    }
+
+    @Test
+    @DisplayName("recover lists only the branches this transport began")
+    void recoverListsOnlyOwnBranches() throws Exception {
+        List<String> terminatorCalls = new ArrayList<>();
+        Xid other = new Xids.SimpleXid(GlassFishTransactionBridge.formatId() + 1,
+                new byte[] { 9 }, new byte[] { 9 });
+        wire(terminatorCalls, XID, OWN, other);
+
+        Xid[] listed = bridge.recover(0);
+
+        assertEquals(1, listed.length);
+        assertTrue(Xids.sameXid(OWN, listed[0]), "listed: " + Arrays.toString(listed));
+    }
+
+    @Test
+    @DisplayName("a branch of this transport's own format is still driven")
+    void ownXidIsDriven() throws Exception {
+        List<String> terminatorCalls = new ArrayList<>();
+        wire(terminatorCalls);
+
+        bridge.rollback(OWN);
+        bridge.forget(OWN);
+        bridge.commit(OWN, false);
+        bridge.prepare(OWN);
+
+        assertEquals(List.of("rollback", "forget", "commit", "prepare"), terminatorCalls);
     }
 
     private static void assertTransactionFailure(Executable operation) {

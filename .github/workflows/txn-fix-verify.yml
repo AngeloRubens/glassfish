@@ -1,0 +1,52 @@
+name: Transaction endpoint fix verification
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ 'fix/txn-xid-format-and-403', 'check/txn-revert' ]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Install Maven 3.9.16
+        run: |
+          curl -sSL -o "$RUNNER_TEMP/maven.tgz" https://archive.apache.org/dist/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.tar.gz
+          tar -xzf "$RUNNER_TEMP/maven.tgz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/apache-maven-3.9.16/bin" >> "$GITHUB_PATH"
+
+      - name: Build what the orb http modules depend on
+        run: |
+          mvn -v
+          mvn -B -ntp install -DskipTests -Dcheckstyle.skip -Dspotbugs.skip -Dcopyright.skip \
+            -pl appserver/orb/orb-http-glassfish -am
+
+      - name: Build and test every orb http module, checkstyle enforced
+        run: |
+          set -o pipefail
+          mvn -B -ntp install \
+            -pl appserver/orb/orb-http-protocol,appserver/orb/orb-http-client,appserver/orb/orb-http-codec-fory,appserver/orb/orb-http-server,appserver/orb/orb-http-glassfish \
+            2>&1 | tee build.log
+
+      - name: Test and checkstyle summary
+        if: always()
+        run: |
+          grep -hE 'Tests run:.*(Fail|Err)|Reactor Summary|SUCCESS|FAILURE|checkstyle|BUILD' build.log | tail -60 || true
+
+      - name: Upload surefire reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: |
+            **/target/surefire-reports/*
+            build.log
