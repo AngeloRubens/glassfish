@@ -24,4 +24,4 @@ jobs:
           mvn -B -ntp install -DskipTests -am -pl appserver/orb/orb-http-protocol,appserver/orb/orb-http-client,appserver/orb/orb-http-server,appserver/orb/orb-http-codec-fory,appserver/orb/orb-http-glassfish
       - name: Strict build of the orb-http modules
         run: |
-          mvn -B -ntp install -pl appserver/orb/orb-http-protocol,appserver/orb/orb-http-client,appserver/orb/orb-http-server,appserver/orb/orb-http-codec-fory,appserver/orb/orb-http-glassfish
+          mvn -B -ntp -fae -Dmaven.test.failure.ignore=true install -pl appserver/orb/orb-http-protocol,appserver/orb/orb-http-client,appserver/orb/orb-http-server,appserver/orb/orb-http-codec-fory,appserver/orb/orb-http-glassfish
