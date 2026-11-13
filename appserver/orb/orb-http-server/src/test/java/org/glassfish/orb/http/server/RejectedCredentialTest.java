@@ -27,7 +27,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * A credential that fails is refused, not quietly downgraded to anonymous.
@@ -57,6 +56,7 @@ class RejectedCredentialTest {
         // Not a 200 with the bean having run as nobody: the caller asked to be
         // someone and was not, and that is an answer, not a downgrade.
         assertEquals(Protocol.SC_FORBIDDEN, exchange.toResponse().status());
-        assertNotNull(exchange.toResponse().headers().get("X-GF-Reason"));
+        // The realm's own text is not the caller's to read.
+        assertEquals(java.util.List.of("not authorized"), exchange.toResponse().headers().get("X-GF-Reason"));
     }
 }

@@ -54,6 +54,16 @@ final class FakeTransactions implements TransactionBridge {
     boolean voteReadOnly;
     /** When set, the next operation fails with this XA code. */
     int failWith;
+    /** When set, the failure carries this reason instead of the default one. */
+    String failReason;
+    /**
+     * When set, prepare, commit, rollback and forget refuse an xid that was
+     * never given to {@link #begin} or {@link #recreate}, as XAER_NOTA. A real
+     * manager knows only the branches it was told about, whatever their format.
+     */
+    boolean rejectUnknownBranches;
+
+    private final java.util.Set<String> seen = new java.util.HashSet<>();
 
     private void record(String call) {
         calls.add(call);
@@ -63,7 +73,7 @@ final class FakeTransactions implements TransactionBridge {
         if (failWith != 0) {
             int code = failWith;
             failWith = 0;
-            throw new TransactionException(what + " was told to fail", code);
+            throw new TransactionException(failReason != null ? failReason : what + " was told to fail", code);
         }
     }
 
@@ -75,6 +85,7 @@ final class FakeTransactions implements TransactionBridge {
         java.nio.ByteBuffer.wrap(global).putLong(nextId.getAndIncrement());
         Xid xid = new Xids.SimpleXid(0x47465348, global, new byte[] { 1 });
         live.put(Xids.key(xid), xid);
+        seen.add(Xids.key(xid));
         return xid;
     }
 
@@ -83,6 +94,7 @@ final class FakeTransactions implements TransactionBridge {
         record("recreate(" + Xids.key(xid) + "," + timeoutSeconds + ")");
         maybeFail("recreate");
         imported.put(Xids.key(xid), timeoutSeconds);
+        seen.add(Xids.key(xid));
         // Importing is how a server learns about a branch it did not begin,
         // which is the whole of the XA case: the coordinator mints the xid and
         // this side hears about it when work arrives for it.
@@ -110,6 +122,7 @@ final class FakeTransactions implements TransactionBridge {
     public int prepare(Xid xid) throws TransactionException {
         record("prepare");
         maybeFail("prepare");
+        requireKnown(xid);
         requireLive(xid);
         prepared.add(xid);
         return voteReadOnly ? XAResource.XA_RDONLY : XAResource.XA_OK;
@@ -119,6 +132,7 @@ final class FakeTransactions implements TransactionBridge {
     public void commit(Xid xid, boolean onePhase) throws TransactionException {
         record("commit(onePhase=" + onePhase + ")");
         maybeFail("commit");
+        requireKnown(xid);
         requireLive(xid);
         live.remove(Xids.key(xid));
     }
@@ -127,6 +141,7 @@ final class FakeTransactions implements TransactionBridge {
     public void rollback(Xid xid) throws TransactionException {
         record("rollback");
         maybeFail("rollback");
+        requireKnown(xid);
         live.remove(Xids.key(xid));
     }
 
@@ -134,6 +149,7 @@ final class FakeTransactions implements TransactionBridge {
     public void forget(Xid xid) throws TransactionException {
         record("forget");
         maybeFail("forget");
+        requireKnown(xid);
         live.remove(Xids.key(xid));
     }
 
@@ -158,6 +174,12 @@ final class FakeTransactions implements TransactionBridge {
         maybeFail("rollbackUserTransaction");
         requireLive(xid);
         live.remove(Xids.key(xid));
+    }
+
+    private void requireKnown(Xid xid) throws TransactionException {
+        if (rejectUnknownBranches && !seen.contains(Xids.key(xid))) {
+            throw new TransactionException("no such branch", XAException.XAER_NOTA);
+        }
     }
 
     private void requireLive(Xid xid) throws TransactionException {

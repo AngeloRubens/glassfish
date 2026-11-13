@@ -16,13 +16,6 @@
 
 package org.glassfish.orb.http.glassfish;
 
-import com.sun.enterprise.transaction.api.JavaEETransactionManager;
-
-import jakarta.resource.spi.XATerminator;
-
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -52,7 +45,10 @@ class GlassFishTransactionBridgeTest {
 
     private static final Xid XID = new Xids.SimpleXid(1, new byte[] { 1, 2 }, new byte[] { 3 });
 
-    private final GlassFishTransactionBridge bridge = new GlassFishTransactionBridge();
+    private static final Xid OWN = new Xids.SimpleXid(GlassFishTransactionBridge.formatId(),
+            new byte[] { 1, 2 }, new byte[] { 3 });
+
+    private GlassFishTransactionBridge bridge = new GlassFishTransactionBridge();
 
     @Test
     @DisplayName("with no manager, driving a branch fails as a transaction failure")
@@ -92,95 +88,100 @@ class GlassFishTransactionBridgeTest {
         bridge.beforeCompletion(XID);
     }
 
-    @Test
-    @DisplayName("a branch this transport did not begin is not driven")
-    void foreignXidIsNotDriven() throws Exception {
-        List<String> terminatorCalls = new ArrayList<>();
-        XATerminator terminator = (XATerminator) Proxy.newProxyInstance(
-                getClass().getClassLoader(), new Class<?>[] { XATerminator.class },
-                (proxy, method, args) -> {
-                    terminatorCalls.add(method.getName());
-                    return method.getName().equals("recover") ? new Xid[0] : null;
-                });
-        InvocationHandler managerHandler = (proxy, method, args) ->
-                method.getName().equals("getXATerminator") ? terminator : null;
-        JavaEETransactionManager manager = (JavaEETransactionManager) Proxy.newProxyInstance(
-                getClass().getClassLoader(), new Class<?>[] { JavaEETransactionManager.class }, managerHandler);
-        Field field = GlassFishTransactionBridge.class.getDeclaredField("transactions");
-        field.setAccessible(true);
-        field.set(bridge, manager);
+    /** A branch minted by a client's own transaction manager - GlassFish's JavaEEXid format, say. */
+    private static final Xid CLIENT = new Xids.SimpleXid(987654321, new byte[] { 7, 7 }, new byte[] { 1 });
 
-        // XID has format id 1, not the bridge's own.
-        TransactionBridge.TransactionException thrown = assertThrows(
-                TransactionBridge.TransactionException.class, () -> bridge.rollback(XID));
-
-        assertEquals(XAException.XAER_NOTA, thrown.errorCode());
-        assertTrue(terminatorCalls.isEmpty(), "terminator was called: " + terminatorCalls);
-    }
-
-    private static final Xid OWN = new Xids.SimpleXid(GlassFishTransactionBridge.formatId(),
-            new byte[] { 1, 2 }, new byte[] { 3 });
+    private final List<String> terminatorCalls = new ArrayList<>();
+    private final List<String> managerCalls = new ArrayList<>();
 
     /** Wires a manager whose terminator records its calls and lists {@code listed} on recover. */
-    private void wire(List<String> terminatorCalls, Xid... listed) throws Exception {
-        XATerminator terminator = (XATerminator) Proxy.newProxyInstance(
-                getClass().getClassLoader(), new Class<?>[] { XATerminator.class },
-                (proxy, method, args) -> {
-                    terminatorCalls.add(method.getName());
-                    if (method.getName().equals("recover")) {
-                        return listed;
-                    }
-                    return method.getReturnType() == int.class ? Integer.valueOf(0) : null;
-                });
-        InvocationHandler managerHandler = (proxy, method, args) ->
-                method.getName().equals("getXATerminator") ? terminator : null;
-        JavaEETransactionManager manager = (JavaEETransactionManager) Proxy.newProxyInstance(
-                getClass().getClassLoader(), new Class<?>[] { JavaEETransactionManager.class }, managerHandler);
-        Field field = GlassFishTransactionBridge.class.getDeclaredField("transactions");
-        field.setAccessible(true);
-        field.set(bridge, manager);
+    private void wire(Xid... listed) {
+        bridge = new GlassFishTransactionBridge(
+                TerminatorRecorder.manager(terminatorCalls, managerCalls, listed));
     }
 
-    private static void assertNotDriven(List<String> terminatorCalls, Executable operation) {
+    @Test
+    @DisplayName("a branch the client's manager minted and the server imported is driven through every XA call")
+    void clientMintedXidImportedByRecreateIsDriven() throws Exception {
+        wire();
+        // What EjbDispatcher does around an invocation that carries the xid.
+        bridge.recreate(CLIENT, 30);
+        bridge.release(CLIENT);
+        terminatorCalls.clear();
+
+        bridge.prepare(CLIENT);
+        bridge.commit(CLIENT, false);
+
+        assertEquals(List.of("prepare", "commit"), terminatorCalls);
+    }
+
+    @Test
+    @DisplayName("a client-minted branch is driven by one-phase commit, rollback and forget too")
+    void clientMintedXidIsDrivenByTheOtherXaCalls() throws Exception {
+        wire();
+
+        bridge.commit(CLIENT, true);
+        assertEquals(List.of("prepare", "commit"), terminatorCalls);
+
+        terminatorCalls.clear();
+        bridge.rollback(CLIENT);
+        assertEquals(List.of("rollback"), terminatorCalls);
+
+        terminatorCalls.clear();
+        bridge.forget(CLIENT);
+        assertEquals(List.of("forget"), terminatorCalls);
+    }
+
+    @Test
+    @DisplayName("recover lists what the terminator holds, whatever the format id")
+    void recoverListsAClientMintedXid() throws Exception {
+        Xid other = new Xids.SimpleXid(GlassFishTransactionBridge.formatId() + 1,
+                new byte[] { 9 }, new byte[] { 9 });
+        wire(CLIENT, OWN, other);
+
+        Xid[] listed = bridge.recover(0);
+
+        assertEquals(3, listed.length, "listed: " + Arrays.toString(listed));
+        assertTrue(Xids.sameXid(CLIENT, listed[0]), "listed: " + Arrays.toString(listed));
+    }
+
+    @Test
+    @DisplayName("the user transaction ends refuse a branch begin() never minted, before touching the manager")
+    void userTransactionEndsRefuseAForeignXid() throws Exception {
+        wire();
+
+        assertNotDriven(() -> bridge.commitUserTransaction(CLIENT));
+        assertNotDriven(() -> bridge.rollbackUserTransaction(CLIENT));
+        assertNotDriven(() -> bridge.commitUserTransaction(XID));
+        assertNotDriven(() -> bridge.rollbackUserTransaction(XID));
+    }
+
+    private void assertNotDriven(Executable operation) {
         TransactionBridge.TransactionException thrown = assertThrows(
                 TransactionBridge.TransactionException.class, operation::run);
         assertEquals(XAException.XAER_NOTA, thrown.errorCode());
         assertTrue(terminatorCalls.isEmpty(), "terminator was called: " + terminatorCalls);
+        // Not even a detach: a refused caller must not disturb the thread.
+        assertTrue(managerCalls.isEmpty(), "manager was called: " + managerCalls);
     }
 
     @Test
-    @DisplayName("prepare, commit, forget and the user-transaction ends refuse a foreign branch too")
-    void everyOperationRefusesAForeignXid() throws Exception {
-        List<String> terminatorCalls = new ArrayList<>();
-        wire(terminatorCalls);
+    @DisplayName("the user transaction ends drive a branch begin() minted")
+    void userTransactionEndsDriveAnOwnXid() throws Exception {
+        wire();
 
-        assertNotDriven(terminatorCalls, () -> bridge.prepare(XID));
-        assertNotDriven(terminatorCalls, () -> bridge.commit(XID, false));
-        assertNotDriven(terminatorCalls, () -> bridge.commit(XID, true));
-        assertNotDriven(terminatorCalls, () -> bridge.forget(XID));
-        assertNotDriven(terminatorCalls, () -> bridge.commitUserTransaction(XID));
-        assertNotDriven(terminatorCalls, () -> bridge.rollbackUserTransaction(XID));
+        bridge.commitUserTransaction(OWN);
+        assertEquals(List.of("prepare", "commit"), terminatorCalls);
+
+        terminatorCalls.clear();
+        bridge.rollbackUserTransaction(OWN);
+        assertEquals(List.of("rollback"), terminatorCalls);
     }
 
     @Test
-    @DisplayName("recover lists only the branches this transport began")
-    void recoverListsOnlyOwnBranches() throws Exception {
-        List<String> terminatorCalls = new ArrayList<>();
-        Xid other = new Xids.SimpleXid(GlassFishTransactionBridge.formatId() + 1,
-                new byte[] { 9 }, new byte[] { 9 });
-        wire(terminatorCalls, XID, OWN, other);
-
-        Xid[] listed = bridge.recover(0);
-
-        assertEquals(1, listed.length);
-        assertTrue(Xids.sameXid(OWN, listed[0]), "listed: " + Arrays.toString(listed));
-    }
-
-    @Test
-    @DisplayName("a branch of this transport's own format is still driven")
+    @DisplayName("a branch of this transport's own format is driven by the XA calls")
     void ownXidIsDriven() throws Exception {
-        List<String> terminatorCalls = new ArrayList<>();
-        wire(terminatorCalls);
+        wire();
 
         bridge.rollback(OWN);
         bridge.forget(OWN);

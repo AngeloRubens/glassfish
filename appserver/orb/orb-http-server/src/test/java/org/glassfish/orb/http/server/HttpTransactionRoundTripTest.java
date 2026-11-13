@@ -200,6 +200,47 @@ class HttpTransactionRoundTripTest {
     }
 
     @Test
+    @DisplayName("an xid minted by the client's own manager, in its own format, is driven end to end")
+    void clientMintedXidOfAnotherFormatIsDriven() throws Exception {
+        // What AmbientTransaction sets up: the client's transaction manager
+        // (GlassFish's JavaEEXid uses format 987654321) mints the xid and
+        // enlists an HttpXAResource; the server only ever hears about it
+        // through recreate. Nothing about the branch is in this endpoint's own
+        // format, and nothing may depend on it being.
+        transactions.rejectUnknownBranches = true;
+        HttpXAResource resource = new HttpXAResource(CONFIG, loopback);
+        Xid xid = new Xids.SimpleXid(987654321, new byte[] { 7, 7, 7, 7 }, new byte[] { 1 });
+
+        resource.start(xid, XAResource.TMNOFLAGS);
+        assertEquals("Ada", greeter().greet("Ada", 1));
+        resource.end(xid, XAResource.TMSUCCESS);
+
+        assertEquals(XAResource.XA_OK, resource.prepare(xid));
+        resource.commit(xid, false);
+
+        assertEquals(List.of("recreate(" + Xids.key(xid) + ",0)",
+                        "release(" + Xids.key(xid) + ")",
+                        "beforeCompletion",
+                        "prepare",
+                        "commit(onePhase=false)"),
+                transactions.calls);
+        assertTrue(transactions.live.isEmpty());
+    }
+
+    @Test
+    @DisplayName("the strict fake does refuse a branch it never saw, so the test above proves something")
+    void aBranchNeverImportedIsUnknown() {
+        transactions.rejectUnknownBranches = true;
+        HttpXAResource resource = new HttpXAResource(CONFIG, loopback);
+        Xid unseen = new Xids.SimpleXid(987654321, new byte[] { 8 }, new byte[] { 1 });
+
+        assertEquals(XAException.XAER_NOTA,
+                assertThrows(XAException.class, () -> resource.prepare(unseen)).errorCode);
+        assertEquals(XAException.XAER_NOTA,
+                assertThrows(XAException.class, () -> resource.rollback(unseen)).errorCode);
+    }
+
+    @Test
     void aReadOnlyBranchVotesReadOnly() throws Exception {
         HttpXAResource resource = new HttpXAResource(CONFIG, loopback);
         Xid xid = transactions.begin(0);

@@ -61,24 +61,51 @@ class TransactionDispatcherTest {
         assertTrue(transactions.calls.stream().noneMatch(c -> c.startsWith("rollback")),
                 "rollback must not run: " + transactions.calls);
         assertReasonIsFixed(exchange);
+        assertRefusalCode(exchange);
     }
 
     @Test
-    @DisplayName("the same refusal on a user-transaction route, with nothing established or cleared")
+    @DisplayName("the same refusal on a user-transaction route, also when the realm refuses in establish")
     void rejectedCredentialOnUserTransactionRouteIs403() {
         FakeTransactions transactions = new FakeTransactions();
-        RecordingSecurity security = new RecordingSecurity();
+        RefusingSecurity security = new RefusingSecurity();
         TransactionDispatcher dispatcher = new TransactionDispatcher(transactions, security);
         Loopback.InMemoryExchange exchange = exchange("POST",
                 TxRoutes.path(Protocol.CONTEXT_PATH, TxRoutes.FAMILY_UT, TxRoutes.OP_COMMIT, XID));
-        exchange.setAuthenticatedUser(Loopback.InMemoryExchange.REJECT);
+        exchange.setAuthenticatedUser("mallory");
 
         assertDoesNotThrow(() -> dispatcher.dispatch(exchange));
 
         assertEquals(Protocol.SC_FORBIDDEN, exchange.toResponse().status());
         assertTrue(transactions.calls.isEmpty(), "bridge was reached: " + transactions.calls);
-        assertTrue(security.events.isEmpty(), "security was touched: " + security.events);
+        assertEquals(1, security.attempts, "establish must have been asked");
         assertReasonIsFixed(exchange);
+        assertRefusalCode(exchange);
+
+        Loopback.InMemoryExchange refusedByExchange = exchange("POST",
+                TxRoutes.path(Protocol.CONTEXT_PATH, TxRoutes.FAMILY_UT, TxRoutes.OP_COMMIT, XID));
+        refusedByExchange.setAuthenticatedUser(Loopback.InMemoryExchange.REJECT);
+        assertDoesNotThrow(() -> dispatcher.dispatch(refusedByExchange));
+        assertEquals(Protocol.SC_FORBIDDEN, refusedByExchange.toResponse().status());
+        assertTrue(transactions.calls.isEmpty(), "bridge was reached: " + transactions.calls);
+        assertRefusalCode(refusedByExchange);
+    }
+
+    @Test
+    @DisplayName("a line break in a failure reason cannot start a second header")
+    void reasonCarriesNoLineBreak() {
+        FakeTransactions transactions = new FakeTransactions();
+        transactions.failWith = XAException.XAER_RMERR;
+        transactions.failReason = "first\r\nX-Injected: yes\nsecond\rthird";
+        TransactionDispatcher dispatcher = new TransactionDispatcher(transactions);
+        Loopback.InMemoryExchange exchange = exchange("POST",
+                TxRoutes.path(Protocol.CONTEXT_PATH, TxRoutes.FAMILY_XA, TxRoutes.OP_ROLLBACK, XID));
+
+        assertDoesNotThrow(() -> dispatcher.dispatch(exchange));
+
+        assertEquals(Protocol.SC_EXCEPTION, exchange.toResponse().status());
+        assertEquals("first  X-Injected: yes second third",
+                exchange.toResponse().headers().get("X-GF-Reason").get(0));
     }
 
     @Test
@@ -110,7 +137,28 @@ class TransactionDispatcherTest {
         assertEquals(1, reasons == null ? 0 : reasons.size(), "reason header: " + reasons);
         String reason = reasons.get(0);
         assertTrue(reason.indexOf('\r') < 0 && reason.indexOf('\n') < 0, "line break in: " + reason);
-        assertTrue(!reason.contains("authentication failed"), "exception text leaked: " + reason);
+        assertEquals("not authorized", reason);
+    }
+
+    private static void assertRefusalCode(Loopback.InMemoryExchange exchange) {
+        List<String> codes = exchange.toResponse().headers().get(TransactionDispatcher.H_ERROR_CODE);
+        assertEquals(List.of(Integer.toString(XAException.XAER_RMFAIL)), codes);
+    }
+
+    /** A realm that refuses whoever it is asked to establish, and counts the clears it is given. */
+    private static final class RefusingSecurity implements SecurityBridge {
+        int attempts;
+
+        @Override
+        public Object establish(String userName) {
+            attempts++;
+            throw new SecurityException("realm refused " + userName);
+        }
+
+        @Override
+        public void clear(Object token) {
+            throw new AssertionError("nothing was established, so nothing may be cleared");
+        }
     }
 
     /** Records what the dispatcher asks of the security bridge. */

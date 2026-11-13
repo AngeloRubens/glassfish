@@ -1,9 +1,9 @@
-name: Transaction endpoint fix verification
+name: Transaction endpoint rework verification
 
 on:
   workflow_dispatch:
   push:
-    branches: [ 'fix/txn-xid-format-and-403', 'check/txn-revert' ]
+    branches: [ 'fix/txn-403-and-ut-format' ]
 
 jobs:
   verify:

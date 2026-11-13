@@ -192,7 +192,7 @@ public final class EjbDispatcher {
             // The credential was offered and refused. Saying so is the point:
             // running the call anonymously would answer a caller that asked to
             // be someone with the rights of no one.
-            fail(exchange, Protocol.SC_FORBIDDEN, e.getMessage());
+            fail(exchange, Protocol.SC_FORBIDDEN, "not authorized");
             return;
         }
 
