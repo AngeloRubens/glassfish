@@ -1,0 +1,37 @@
+name: Test Fory gRPC security clear
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Run the test
+        shell: bash
+        run: |
+          mvn -B -e -ntp -Pqa,snapshots -Dcheckstyle.skip=true -DfailIfNoTests=false -Dsurefire.failIfNoSpecifiedTests=false \
+            -Dtest=ForyGrpcExtensionSecurityTest -pl appserver/orb/orb-http-fory-grpc -am test 2>&1 | tee mvn.log
+
+      - name: Print failing assertions
+        if: always()
+        run: |
+          grep -hE "Tests run:|FAIL|AssertionFailed|expected:|ERROR\]" mvn.log | head -60 || true
+          cat appserver/orb/orb-http-fory-grpc/target/surefire-reports/*.txt 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: surefire-reports
+          path: |
+            appserver/orb/*/target/surefire-reports
+            mvn.log
