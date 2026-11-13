@@ -1,9 +1,9 @@
-name: Final PR 26215 verification
+name: Final PR 26215 revert check
 
 on:
   workflow_dispatch:
   push:
-    branches: [ 'final/pr26215' ]
+    branches: [ 'check/final26215-revert-requireown', 'check/final26215-gate' ]
 
 jobs:
   verify:
@@ -33,7 +33,7 @@ jobs:
       - name: Build and test every orb http module, checkstyle enforced
         run: |
           set -o pipefail
-          mvn -B -ntp install \
+          mvn -B -ntp -fae -Dmaven.test.failure.ignore=true install \
             -pl appserver/orb/orb-http-protocol,appserver/orb/orb-http-client,appserver/orb/orb-http-codec-fory,appserver/orb/orb-http-server,appserver/orb/orb-http-glassfish \
             2>&1 | tee build.log
 

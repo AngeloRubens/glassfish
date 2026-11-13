@@ -26,6 +26,7 @@ import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
 import java.nio.ByteBuffer;
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicLong;
 
 import javax.transaction.xa.XAException;
@@ -165,7 +166,7 @@ public class GlassFishTransactionBridge implements TransactionBridge {
     public int prepare(Xid xid) throws TransactionException {
         int vote;
         try {
-            vote = terminator().prepare(xid);
+            vote = ownTerminator(xid).prepare(xid);
         } catch (XAException e) {
             discard(xid);
             throw failure("prepare failed for " + Xids.key(xid), e.errorCode, e);
@@ -197,7 +198,7 @@ public class GlassFishTransactionBridge implements TransactionBridge {
             return;
         }
         try {
-            terminator().commit(xid, false);
+            ownTerminator(xid).commit(xid, false);
         } catch (XAException e) {
             throw failure("commit failed for " + Xids.key(xid), e.errorCode, e);
         }
@@ -239,7 +240,7 @@ public class GlassFishTransactionBridge implements TransactionBridge {
     @Override
     public void rollback(Xid xid) throws TransactionException {
         try {
-            terminator().rollback(xid);
+            ownTerminator(xid).rollback(xid);
         } catch (XAException e) {
             throw failure("rollback failed for " + Xids.key(xid), e.errorCode, e);
         }
@@ -248,7 +249,7 @@ public class GlassFishTransactionBridge implements TransactionBridge {
     @Override
     public void forget(Xid xid) throws TransactionException {
         try {
-            terminator().forget(xid);
+            ownTerminator(xid).forget(xid);
         } catch (XAException e) {
             throw failure("forget failed for " + Xids.key(xid), e.errorCode, e);
         }
@@ -258,7 +259,15 @@ public class GlassFishTransactionBridge implements TransactionBridge {
     public Xid[] recover(int flags) throws TransactionException {
         try {
             Xid[] found = terminator().recover(flags);
-            return found == null ? new Xid[0] : found;
+            if (found == null) {
+                return new Xid[0];
+            }
+            // The terminator lists every in-doubt branch the server holds,
+            // including ones other transports began. Those are not this
+            // transport's to reveal or to resolve.
+            return Arrays.stream(found)
+                    .filter(GlassFishTransactionBridge::isOwn)
+                    .toArray(Xid[]::new);
         } catch (XAException e) {
             throw failure("recover failed", e.errorCode, e);
         }
@@ -292,13 +301,11 @@ public class GlassFishTransactionBridge implements TransactionBridge {
      */
     @Override
     public void commitUserTransaction(Xid xid) throws TransactionException {
-        requireOwn(xid);
         commitOnePhase(xid);
     }
 
     @Override
     public void rollbackUserTransaction(Xid xid) throws TransactionException {
-        requireOwn(xid);
         rollback(xid);
     }
 
@@ -335,29 +342,25 @@ public class GlassFishTransactionBridge implements TransactionBridge {
     }
 
     /**
-     * Refuses a user transaction end for a branch this transport did not begin.
+     * The terminator, for a branch this transport began.
      *
-     * <p>This is a correctness guard, not authorization. A user transaction
-     * end completes the branch in one phase, which is only right for a branch
-     * {@link #begin} minted. A branch owned by the caller's own coordinator
-     * (for example {@code HttpUserTransaction.commit} while an
-     * {@code HttpXAResource} is started on the thread) must be completed by
-     * that coordinator through the XA routes, so the end is answered as unknown.
-     * The xids {@link #begin} mints always carry this transport's format id, so
-     * one with another format id was never handed out. The XA routes carry xids
-     * minted by the caller's own transaction manager, in whatever format that
-     * manager uses, and cannot be filtered this way.
+     * <p>The terminator drives every branch the server holds, whoever began
+     * it, so the endpoint's reach is whatever this check leaves it. Anything
+     * with another format id is answered as unknown, which is also what a
+     * caller probing for branches should learn: nothing.
      *
-     * <p>Called before the terminator is touched, so a refusal neither
-     * detaches the thread nor reaches the manager.
-     *
-     * @param xid the branch about to be committed or rolled back
+     * @param xid the branch about to be driven
      */
-    private static void requireOwn(Xid xid) throws TransactionException {
-        if (xid == null || xid.getFormatId() != FORMAT_ID) {
-            throw new TransactionException("no such branch: " + (xid == null ? "null" : Xids.key(xid)),
-                    XAException.XAER_NOTA);
+    private XATerminator ownTerminator(Xid xid) throws TransactionException {
+        XATerminator terminator = terminator();
+        if (!isOwn(xid)) {
+            throw new TransactionException("no such branch: " + Xids.key(xid), XAException.XAER_NOTA);
         }
+        return terminator;
+    }
+
+    private static boolean isOwn(Xid xid) {
+        return xid != null && xid.getFormatId() == FORMAT_ID;
     }
 
     private static TransactionException failure(String message, int errorCode, Throwable cause) {
