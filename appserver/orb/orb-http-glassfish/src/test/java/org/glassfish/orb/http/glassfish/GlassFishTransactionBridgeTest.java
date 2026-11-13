@@ -16,6 +16,16 @@
 
 package org.glassfish.orb.http.glassfish;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Proxy;
+import java.util.ArrayList;
+import java.util.List;
+
+import com.sun.enterprise.transaction.api.JavaEETransactionManager;
+
+import jakarta.resource.spi.XATerminator;
+
 import javax.transaction.xa.XAException;
 import javax.transaction.xa.Xid;
 
@@ -79,6 +89,32 @@ class GlassFishTransactionBridgeTest {
         // Doing it here as well would run them twice, so this is deliberately
         // empty - and must stay safe to call with no manager at all.
         bridge.beforeCompletion(XID);
+    }
+
+    @Test
+    @DisplayName("a branch this transport did not begin is not driven")
+    void foreignXidIsNotDriven() throws Exception {
+        List<String> terminatorCalls = new ArrayList<>();
+        XATerminator terminator = (XATerminator) Proxy.newProxyInstance(
+                getClass().getClassLoader(), new Class<?>[] { XATerminator.class },
+                (proxy, method, args) -> {
+                    terminatorCalls.add(method.getName());
+                    return method.getName().equals("recover") ? new Xid[0] : null;
+                });
+        InvocationHandler managerHandler = (proxy, method, args) ->
+                method.getName().equals("getXATerminator") ? terminator : null;
+        JavaEETransactionManager manager = (JavaEETransactionManager) Proxy.newProxyInstance(
+                getClass().getClassLoader(), new Class<?>[] { JavaEETransactionManager.class }, managerHandler);
+        Field field = GlassFishTransactionBridge.class.getDeclaredField("transactions");
+        field.setAccessible(true);
+        field.set(bridge, manager);
+
+        // XID has format id 1, not the bridge's own.
+        TransactionBridge.TransactionException thrown = assertThrows(
+                TransactionBridge.TransactionException.class, () -> bridge.rollback(XID));
+
+        assertEquals(XAException.XAER_NOTA, thrown.errorCode());
+        assertTrue(terminatorCalls.isEmpty(), "terminator was called: " + terminatorCalls);
     }
 
     private static void assertTransactionFailure(Executable operation) {

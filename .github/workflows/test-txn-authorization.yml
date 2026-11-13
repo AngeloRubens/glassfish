@@ -1,0 +1,41 @@
+name: Transaction endpoint authorization tests
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Run the authorization tests
+        run: |
+          mvn -v
+          mvn -B -ntp -fae -Dmaven.test.failure.ignore=true \
+            -pl appserver/orb/orb-http-server,appserver/orb/orb-http-glassfish -am test \
+            -Dtest='TransactionDispatcherTest,GlassFishTransactionBridgeTest' \
+            -Dsurefire.failIfNoSpecifiedTests=false \
+            -Dcheckstyle.skip -Dspotbugs.skip -Dcopyright.skip 2>&1 | tee build.log
+
+      - name: Failing assertions
+        if: always()
+        run: |
+          grep -hE 'Tests run:|FAIL|ERROR\]|AssertionFailed|expected:|TransactionException|SecurityException' build.log | head -80 || true
+          for f in $(find . -path '*surefire-reports*' -name '*.txt'); do echo "== $f"; head -40 "$f"; done
+
+      - name: Upload surefire reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: |
+            **/target/surefire-reports/*
+            build.log
