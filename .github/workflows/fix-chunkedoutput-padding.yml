@@ -29,7 +29,7 @@ jobs:
           MODS=$(ls -d appserver/orb/orb-http-*/ | sed 's#/$##' | paste -sd,)
           echo "modules: $MODS"
           mvn -B -e -ntp -pl "$MODS" -am install -DskipTests
-          mvn -B -e -ntp -pl "$MODS" install -Dtrimstacktrace=false
+          mvn -B -e -ntp -pl "$MODS" install -Dtrimstacktrace=false -Dmaven.test.failure.ignore=true
 
       - name: Summarize results
         if: always()
@@ -44,3 +44,7 @@ jobs:
         with:
           name: surefire-reports
           path: appserver/orb/orb-http-*/target/surefire-reports
+
+      - name: List failing tests
+        if: always()
+        run: grep -lE "FAILURE|ERROR" appserver/orb/orb-http-*/target/surefire-reports/*.txt | xargs -r grep -hE "<<< (FAILURE|ERROR)"
