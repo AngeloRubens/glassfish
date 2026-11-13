@@ -1,0 +1,44 @@
+name: Final PR 26201 check revert-reason
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ 'check/final26201-revert-reason' ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Install Maven 3.9.16
+        run: |
+          curl -fsSL -o /tmp/maven.tgz https://archive.apache.org/dist/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.tar.gz
+          sudo mkdir -p /opt/maven
+          sudo tar -xzf /tmp/maven.tgz -C /opt/maven --strip-components=1
+          echo /opt/maven/bin >> "$GITHUB_PATH"
+      - name: Build upstream modules without tests
+        run: |
+          mvn -v
+          mvn -B -e -ntp -pl appserver/orb/orb-http-protocol,appserver/orb/orb-http-client,appserver/orb/orb-http-server,appserver/orb/orb-http-codec-fory -am \
+            install -DskipTests
+      - name: Install with all tests and checkstyle
+        run: |
+          mvn -B -e -ntp -fae -Dmaven.test.failure.ignore=true -pl appserver/orb/orb-http-protocol,appserver/orb/orb-http-client,appserver/orb/orb-http-server,appserver/orb/orb-http-codec-fory \
+            install
+      - name: Print reports
+        if: always()
+        run: |
+          for f in $(find appserver/orb -path '*target/surefire-reports/*.txt' 2>/dev/null); do echo "=== $f"; cat "$f"; done
+          grep -rh "checkstyle" appserver/orb/*/target/checkstyle-result.xml 2>/dev/null | grep -c "<error" || true
+      - name: Upload surefire reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: appserver/orb/*/target/surefire-reports
