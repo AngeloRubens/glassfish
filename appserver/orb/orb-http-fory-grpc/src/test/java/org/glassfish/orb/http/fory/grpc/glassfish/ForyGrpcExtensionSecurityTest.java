@@ -22,7 +22,6 @@ import java.util.Map;
 import org.glassfish.internal.data.ApplicationRegistry;
 import org.glassfish.orb.http.fory.grpc.ForyGeneratedRuntime;
 import org.glassfish.orb.http.fory.grpc.ForyGeneratedSchemaAdapter;
-import org.glassfish.orb.http.fory.grpc.ForyGrpcServerAdapter;
 import org.glassfish.orb.http.fory.grpc.ForyGrpcSkeleton;
 import org.glassfish.orb.http.fory.grpc.ForyRuntimeModelGenerator;
 import org.glassfish.orb.http.glassfish.GlassFishContainerBridge;
