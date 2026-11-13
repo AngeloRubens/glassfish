@@ -1,0 +1,46 @@
+name: Fix ChunkedOutput padding
+
+on:
+  push:
+    branches: [ 'fix/chunkedoutput-padding', 'check/chunkedoutput-revert' ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Install Maven 3.9.16
+        run: |
+          curl -fsSL https://archive.apache.org/dist/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.tar.gz | tar -xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/apache-maven-3.9.16/bin" >> "$GITHUB_PATH"
+
+      - name: Build and test every orb-http module
+        run: |
+          mvn -v
+          MODS=$(ls -d appserver/orb/orb-http-*/ | sed 's#/$##' | paste -sd,)
+          echo "modules: $MODS"
+          mvn -B -e -ntp -pl "$MODS" -am install -DskipTests
+          mvn -B -e -ntp -pl "$MODS" install -Dtrimstacktrace=false
+
+      - name: Summarize results
+        if: always()
+        run: |
+          for d in appserver/orb/orb-http-*/target/surefire-reports; do
+            echo "=== $d"; grep -h "Tests run:.*Fail" "$d"/*.txt | awk -F'[:,]' '{r+=$2;f+=$4;e+=$6;s+=$8} END{print "run="r" failures="f" errors="e" skipped="s}'
+          done
+
+      - name: Upload surefire reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: appserver/orb/orb-http-*/target/surefire-reports
