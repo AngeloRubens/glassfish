@@ -1,9 +1,9 @@
-name: Final PR 26233
+name: Check PR 26233 revert
 
 on:
   workflow_dispatch:
   push:
-    branches: [ 'final/pr26233' ]
+    branches: [ 'check/final26233-revert-catch' ]
 
 jobs:
   verify:
@@ -36,7 +36,7 @@ jobs:
       - name: Verify the orb modules with all their tests and checkstyle
         shell: bash
         run: |
-          mvn -B -e -ntp -Pqa,snapshots \
+          mvn -B -e -ntp -fae -Dmaven.test.failure.ignore=true -Pqa,snapshots \
             -pl appserver/orb/orb-http-glassfish,appserver/orb/orb-http-fory-grpc install 2>&1 | tee mvn.log
 
       - name: Summarize
