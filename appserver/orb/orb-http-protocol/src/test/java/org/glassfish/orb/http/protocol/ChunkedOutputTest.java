@@ -135,4 +135,22 @@ class ChunkedOutputTest {
         }
         return out.toByteArray();
     }
+
+    @Test
+    @DisplayName("frame header at the end of a chunk leaves no padding")
+    void frameHeaderAtChunkEndLeavesNoPadding() throws IOException {
+        ChunkedOutput out = new ChunkedOutput(8);
+        out.write(new byte[] {1, 2, 3, 4, 5});
+        ChunkedOutput.Frame f = out.beginFrame((byte) 7);
+        out.write(new byte[] {9, 9, 9});
+        f.close();
+
+        assertEquals(13L, out.size());
+        long buffered = 0;
+        for (ByteBuffer b : out.toByteBuffers()) {
+            buffered += b.remaining();
+        }
+        assertEquals(13L, buffered);
+        assertArrayEquals(new byte[] {1, 2, 3, 4, 5, 7, 0, 0, 0, 3, 9, 9, 9}, out.toByteArray());
+    }
 }

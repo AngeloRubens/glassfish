@@ -281,4 +281,20 @@ class ForyMarshallerTest {
         assertEquals("fory", marshaller.codec());
         assertNotNull(Marshallers.find("fory").orElse(null));
     }
+
+    @Test
+    void streamedFrameAfterNearlyFullChunkRoundTrips() throws Exception {
+        ChunkedOutput out = new ChunkedOutput(16);
+        out.write(new byte[13]);
+        try (Marshaller.ObjectWriter w = marshaller.newWriter(out)) {
+            w.writeObject("x".repeat(4096));
+            w.flush();
+        }
+
+        ChunkedInput in = new ChunkedInput(out.toByteBuffers());
+        assertEquals(13, in.readNBytes(13).length);
+        try (Marshaller.ObjectReader r = marshaller.newReader(in, getClass().getClassLoader(), ALLOW_ALL)) {
+            assertEquals("x".repeat(4096), r.readObject());
+        }
+    }
 }

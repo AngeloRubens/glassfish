@@ -1,0 +1,50 @@
+name: Test ChunkedOutput padding
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Install Maven 3.9.16
+        run: |
+          curl -fsSL https://archive.apache.org/dist/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.tar.gz | tar -xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/apache-maven-3.9.16/bin" >> "$GITHUB_PATH"
+
+      - name: Run the two test classes
+        run: |
+          mvn -v
+          mvn -B -e -ntp -fae -Dcheckstyle.skip=true -Dmaven.test.failure.ignore=true \
+            -pl appserver/orb/orb-http-protocol,appserver/orb/orb-http-codec-fory -am \
+            test -Dtest=ChunkedOutputTest,ForyMarshallerTest -Dsurefire.failIfNoSpecifiedTests=false \
+            -Dtrimstacktrace=false
+
+      - name: Print results
+        if: always()
+        run: |
+          for f in appserver/orb/orb-http-protocol/target/surefire-reports/*ChunkedOutputTest.txt \
+                   appserver/orb/orb-http-codec-fory/target/surefire-reports/*ForyMarshallerTest.txt; do
+            echo "=== $f"; cat "$f" || true
+          done
+          grep -h -A6 -E "frameHeaderAtChunkEndLeavesNoPadding|streamedFrameAfterNearlyFullChunkRoundTrips" \
+            appserver/orb/orb-http-protocol/target/surefire-reports/*.txt \
+            appserver/orb/orb-http-codec-fory/target/surefire-reports/*.txt || true
+
+      - name: Upload surefire reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: |
+            appserver/orb/orb-http-protocol/target/surefire-reports
+            appserver/orb/orb-http-codec-fory/target/surefire-reports
