@@ -16,16 +16,16 @@
 
 package org.glassfish.orb.http.glassfish;
 
+import com.sun.enterprise.transaction.api.JavaEETransactionManager;
+
+import jakarta.resource.spi.XATerminator;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-
-import com.sun.enterprise.transaction.api.JavaEETransactionManager;
-
-import jakarta.resource.spi.XATerminator;
 
 import javax.transaction.xa.XAException;
 import javax.transaction.xa.Xid;
