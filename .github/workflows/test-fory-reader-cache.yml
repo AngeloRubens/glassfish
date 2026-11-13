@@ -1,7 +1,11 @@
 name: Test Fory reader cache
 
 on:
+  push:
+    branches: [ 'test/chunkedoutput-padding' ]
   workflow_dispatch:
+  push:
+    branches: [ 'test/fory-reader-cache' ]
 
 jobs:
   test:
