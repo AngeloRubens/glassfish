@@ -440,7 +440,7 @@ public final class EjbDispatcher {
         if (reason != null) {
             // A short diagnostic header, never a marshalled body: a protocol
             // level failure must be readable by an intermediary too.
-            exchange.setResponseHeader("X-GF-Reason", reason.replace('\n', ' ').replace('\r', ' '));
+            exchange.setResponseHeader("X-GF-Reason", reason.replace('\n', ' '));
         }
     }
 
