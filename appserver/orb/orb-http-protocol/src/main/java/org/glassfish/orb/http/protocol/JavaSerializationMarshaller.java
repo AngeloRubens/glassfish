@@ -47,6 +47,14 @@ public final class JavaSerializationMarshaller implements Marshaller {
 
     public static final String CODEC = ContentType.CODEC_JSER;
 
+    /**
+     * Built once: the filter is immutable and thread-safe, and callers such as
+     * the Fory reader cache use it as a key, so a fresh instance per call would
+     * defeat that cache.
+     */
+    private static final ObjectInputFilter DEFAULT_FILTER = ObjectInputFilter.Config.createFilter(
+            "maxdepth=64;maxarray=100000;maxrefs=100000;maxbytes=104857600;*");
+
     @Override
     public String codec() {
         return CODEC;
@@ -104,8 +112,7 @@ public final class JavaSerializationMarshaller implements Marshaller {
      * application's own classes.
      */
     public static ObjectInputFilter defaultFilter() {
-        return ObjectInputFilter.Config.createFilter(
-                "maxdepth=64;maxarray=100000;maxrefs=100000;maxbytes=104857600;*");
+        return DEFAULT_FILTER;
     }
 
     /**

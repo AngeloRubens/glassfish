@@ -3,12 +3,12 @@ name: Test Fory reader cache
 on:
   workflow_dispatch:
   push:
-    branches: [ 'test/fory-reader-cache' ]
+    branches: [ 'fix/fory-reader-cache' ]
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -16,19 +16,28 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - name: Run ForyMarshallerTest
+      - name: Install Maven 3.9.16
+        run: |
+          curl -fsSL -o /tmp/maven.tgz https://archive.apache.org/dist/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.tar.gz
+          sudo mkdir -p /opt/maven
+          sudo tar -xzf /tmp/maven.tgz -C /opt/maven --strip-components=1
+          echo /opt/maven/bin >> "$GITHUB_PATH"
+      - name: Build upstream modules without tests
         run: |
           mvn -v
-          mvn -B -e -ntp -Denforcer.skip=true -Dcheckstyle.skip=true \
-            -pl appserver/orb/orb-http-codec-fory -am test \
-            -Dtest=ForyMarshallerTest -Dsurefire.failIfNoSpecifiedTests=false -DfailIfNoTests=false
-      - name: Print failures
+          mvn -B -e -ntp -pl appserver/orb/orb-http-codec-fory,appserver/orb/orb-http-protocol,appserver/orb/orb-http-client,appserver/orb/orb-http-server -am \
+            install -DskipTests
+      - name: Install with all tests and checkstyle
+        run: |
+          mvn -B -e -ntp -pl appserver/orb/orb-http-codec-fory,appserver/orb/orb-http-protocol,appserver/orb/orb-http-client,appserver/orb/orb-http-server \
+            install
+      - name: Print reports
         if: always()
         run: |
-          for f in $(find appserver/orb/orb-http-codec-fory/target/surefire-reports -name '*.txt' 2>/dev/null); do echo "=== $f"; cat "$f"; done
+          for f in $(find appserver/orb -path '*target/surefire-reports/*.txt' 2>/dev/null); do echo "=== $f"; cat "$f"; done
       - name: Upload surefire reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: surefire-reports
-          path: appserver/orb/orb-http-codec-fory/target/surefire-reports
+          path: appserver/orb/*/target/surefire-reports
