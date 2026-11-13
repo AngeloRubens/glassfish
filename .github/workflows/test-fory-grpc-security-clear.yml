@@ -21,7 +21,7 @@ jobs:
       - name: Run the test
         shell: bash
         run: |
-          mvn -B -e -ntp -Pqa,snapshots -Dcheckstyle.skip=true -DfailIfNoTests=false -Dsurefire.failIfNoSpecifiedTests=false \
+          mvn -B -e -ntp -Pqa,snapshots -Dcheckstyle.skip=true -Denforcer.skip=true -DfailIfNoTests=false -Dsurefire.failIfNoSpecifiedTests=false \
             -Dtest=ForyGrpcExtensionSecurityTest -pl appserver/orb/orb-http-fory-grpc -am test 2>&1 | tee mvn.log
 
       - name: Print failing assertions
