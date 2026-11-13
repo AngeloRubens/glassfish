@@ -1,8 +1,6 @@
 name: Test Fory reader cache
 
 on:
-  push:
-    branches: [ 'test/chunkedoutput-padding' ]
   workflow_dispatch:
   push:
     branches: [ 'test/fory-reader-cache' ]
@@ -21,7 +19,7 @@ jobs:
       - name: Run ForyMarshallerTest
         run: |
           mvn -v
-          mvn -B -e -ntp -Denforcer.skip=true -Dcheckstyle.skip=true -Dmaven.test.failure.ignore=false \
+          mvn -B -e -ntp -Denforcer.skip=true -Dcheckstyle.skip=true \
             -pl appserver/orb/orb-http-codec-fory -am test \
             -Dtest=ForyMarshallerTest -Dsurefire.failIfNoSpecifiedTests=false -DfailIfNoTests=false
       - name: Print failures
