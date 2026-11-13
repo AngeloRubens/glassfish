@@ -271,7 +271,8 @@ class ForyMarshallerTest {
     @DisplayName("repeated requests with the default filter reuse one reader")
     @SuppressWarnings("unchecked")
     void readersAreCachedAcrossRequests() throws Exception {
-        ClassLoader loader = getClass().getClassLoader();
+        // A throwaway loader, so entries other tests made cannot be counted.
+        ClassLoader loader = new java.net.URLClassLoader(new java.net.URL[0], getClass().getClassLoader());
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (Marshaller.ObjectWriter writer = marshaller.newWriter(out)) {
             writer.writeObject(new Node("cached"));
