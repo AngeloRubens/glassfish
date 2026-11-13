@@ -18,6 +18,12 @@ jobs:
           java-version: '21'
           cache: maven
 
+      - name: Install Maven 3.9.16
+        run: |
+          curl -sSL -o "$RUNNER_TEMP/maven.tgz" https://archive.apache.org/dist/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.tar.gz
+          tar -xzf "$RUNNER_TEMP/maven.tgz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/apache-maven-3.9.16/bin" >> "$GITHUB_PATH"
+
       - name: Run the authorization tests
         run: |
           mvn -v
