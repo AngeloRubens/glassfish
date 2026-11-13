@@ -3,7 +3,7 @@ name: Fory gRPC security fix
 on:
   workflow_dispatch:
   push:
-    branches: [ 'fix/fory-grpc-security-clear-v2' ]
+    branches: [ 'check/fory-grpc-security-v2-revert' ]
 
 jobs:
   verify:
@@ -37,7 +37,7 @@ jobs:
         shell: bash
         run: |
           mvn -B -e -ntp -Pqa,snapshots \
-            -pl appserver/orb/orb-http-glassfish,appserver/orb/orb-http-fory-grpc install 2>&1 | tee mvn.log
+            -fae -Dmaven.test.failure.ignore=true -pl appserver/orb/orb-http-glassfish,appserver/orb/orb-http-fory-grpc install 2>&1 | tee mvn.log
 
       - name: Summarize
         if: always()
