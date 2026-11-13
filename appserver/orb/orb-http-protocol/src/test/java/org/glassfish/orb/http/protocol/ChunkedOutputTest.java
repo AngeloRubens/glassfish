@@ -214,17 +214,23 @@ class ChunkedOutputTest {
     }
 
     @Test
-    @DisplayName("an empty frame whose header ends exactly at a chunk boundary is patched")
-    void emptyFrameEndingAtChunkBoundary() throws IOException {
-        ChunkedOutput out = new ChunkedOutput(8);
-        out.write(new byte[3]);
-        ChunkedOutput.Frame f = out.beginFrame((byte) 7);
-        f.close();
+    @DisplayName("an empty frame is patched wherever its header ends relative to the chunk boundary")
+    void emptyFrameAtAnyOffset() throws IOException {
+        // Prefix 3 ends the header exactly at the chunk end: the current chunk is
+        // full but not yet listed when patch() runs. Prefixes 4..8 straddle or
+        // follow the boundary.
+        for (int prefix = 3; prefix <= 8; prefix++) {
+            ChunkedOutput out = new ChunkedOutput(8);
+            out.write(new byte[prefix]);
+            ChunkedOutput.Frame f = out.beginFrame((byte) 7);
+            f.close();
 
-        assertArrayEquals(new byte[] {0, 0, 0, 7, 0, 0, 0, 0}, out.toByteArray());
-        assertEquals(1, out.toByteBuffers().length);
-        assertEquals(8, out.size());
-        assertEquals(out.size(), remaining(out.toByteBuffers()));
+            byte[] expected = new byte[prefix + 5];
+            expected[prefix] = 7;
+            assertArrayEquals(expected, out.toByteArray(), "prefix " + prefix);
+            assertEquals(prefix + 5, out.size(), "prefix " + prefix);
+            assertEquals(out.size(), remaining(out.toByteBuffers()), "prefix " + prefix);
+        }
     }
 
     private static long remaining(ByteBuffer[] buffers) {
