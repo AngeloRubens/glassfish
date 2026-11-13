@@ -259,4 +259,38 @@ class ForyMarshallerTest {
         assertEquals("fory", marshaller.codec());
         assertNotNull(Marshallers.find("fory").orElse(null));
     }
+
+    @Test
+    @DisplayName("the default filter is one shared instance, so it can key a cache")
+    void defaultFilterIsASingleton() {
+        assertSame(JavaSerializationMarshaller.defaultFilter(),
+                JavaSerializationMarshaller.defaultFilter());
+    }
+
+    @Test
+    @DisplayName("repeated requests with the default filter reuse one reader")
+    @SuppressWarnings("unchecked")
+    void readersAreCachedAcrossRequests() throws Exception {
+        ClassLoader loader = getClass().getClassLoader();
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (Marshaller.ObjectWriter writer = marshaller.newWriter(out)) {
+            writer.writeObject(new Node("cached"));
+            writer.flush();
+        }
+        for (int request = 0; request < 2; request++) {
+            try (Marshaller.ObjectReader reader = marshaller.newReader(
+                    new ByteArrayInputStream(out.toByteArray()), loader,
+                    JavaSerializationMarshaller.defaultFilter())) {
+                assertEquals("cached", ((Node) reader.readObject()).name);
+            }
+        }
+
+        java.lang.reflect.Field field = ForyMarshaller.class.getDeclaredField("READERS");
+        field.setAccessible(true);
+        java.util.Map<ClassLoader, java.util.Map<ObjectInputFilter, ?>> readers =
+                (java.util.Map<ClassLoader, java.util.Map<ObjectInputFilter, ?>>) field.get(null);
+        java.util.Map<ObjectInputFilter, ?> byFilter = readers.get(loader);
+        assertNotNull(byFilter);
+        assertEquals(1, byFilter.size(), "one reader per (loader, filter), not one per request");
+    }
 }

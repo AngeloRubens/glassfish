@@ -1,0 +1,32 @@
+name: Test Fory reader cache
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Run ForyMarshallerTest
+        run: |
+          mvn -v
+          mvn -B -e -ntp -Denforcer.skip=true -Dcheckstyle.skip=true -Dmaven.test.failure.ignore=false \
+            -pl appserver/orb/orb-http-codec-fory -am test \
+            -Dtest=ForyMarshallerTest -Dsurefire.failIfNoSpecifiedTests=false -DfailIfNoTests=false
+      - name: Print failures
+        if: always()
+        run: |
+          for f in $(find appserver/orb/orb-http-codec-fory/target/surefire-reports -name '*.txt' 2>/dev/null); do echo "=== $f"; cat "$f"; done
+      - name: Upload surefire reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: appserver/orb/orb-http-codec-fory/target/surefire-reports
