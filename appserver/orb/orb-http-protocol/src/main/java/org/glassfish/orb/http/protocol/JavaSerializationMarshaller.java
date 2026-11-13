@@ -48,9 +48,9 @@ public final class JavaSerializationMarshaller implements Marshaller {
     public static final String CODEC = ContentType.CODEC_JSER;
 
     /**
-     * Built once: the filter is immutable and thread-safe, and callers such as
-     * the Fory reader cache use it as a key, so a fresh instance per call would
-     * defeat that cache.
+     * The one filter {@link #defaultFilter()} returns. It is immutable and
+     * thread-safe, and being a single instance lets callers use it as a cache
+     * key.
      */
     private static final ObjectInputFilter DEFAULT_FILTER = ObjectInputFilter.Config.createFilter(
             "maxdepth=64;maxarray=100000;maxrefs=100000;maxbytes=104857600;*");
@@ -110,6 +110,11 @@ public final class JavaSerializationMarshaller implements Marshaller {
      * A filter that rejects deeply nested or oversized graphs. It is a floor,
      * not a policy: a server should compose it with an allow-list of the
      * application's own classes.
+     * <p>
+     * Returns the same instance on every call; callers may use it as a cache
+     * key.
+     *
+     * @return the shared default filter
      */
     public static ObjectInputFilter defaultFilter() {
         return DEFAULT_FILTER;

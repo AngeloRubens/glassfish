@@ -1,9 +1,9 @@
-name: Test Fory reader cache
+name: Test Fory reader cache v2
 
 on:
   workflow_dispatch:
   push:
-    branches: [ 'fix/fory-reader-cache' ]
+    branches: [ 'fix/fory-reader-cache-v2' ]
 
 jobs:
   test:
