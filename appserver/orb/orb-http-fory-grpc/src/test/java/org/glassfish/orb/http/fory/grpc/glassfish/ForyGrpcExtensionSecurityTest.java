@@ -42,7 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class ForyGrpcExtensionSecurityTest {
 
-    private static final String PATH = "/demo.Greeter/greet";
+    private static final String PATH = "/fory/demo.Greeter/greet";
 
     public interface Greeter {
         String greet(String name);
