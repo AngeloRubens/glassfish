@@ -2,6 +2,8 @@ name: Test Fory gRPC security clear
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ 'test/fory-grpc-security-clear' ]
 
 jobs:
   test:
