@@ -24,11 +24,16 @@ jobs:
           tar -xzf "$RUNNER_TEMP/maven.tgz" -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/apache-maven-3.9.16/bin" >> "$GITHUB_PATH"
 
+      - name: Build what the glassfish module depends on
+        run: |
+          mvn -B -ntp install -DskipTests -Dcheckstyle.skip -Dspotbugs.skip -Dcopyright.skip \
+            -pl appserver/orb/orb-http-glassfish -am
+
       - name: Run the authorization tests
         run: |
           mvn -v
           mvn -B -ntp -fae -Dmaven.test.failure.ignore=true \
-            -pl appserver/orb/orb-http-server,appserver/orb/orb-http-glassfish -am test \
+            -pl appserver/orb/orb-http-server,appserver/orb/orb-http-glassfish test \
             -Dtest='TransactionDispatcherTest,GlassFishTransactionBridgeTest' \
             -Dsurefire.failIfNoSpecifiedTests=false \
             -Dcheckstyle.skip -Dspotbugs.skip -Dcopyright.skip 2>&1 | tee build.log
