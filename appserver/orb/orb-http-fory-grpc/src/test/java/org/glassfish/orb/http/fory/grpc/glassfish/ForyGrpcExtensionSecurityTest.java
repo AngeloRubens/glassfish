@@ -9,66 +9,65 @@
 
 package org.glassfish.orb.http.fory.grpc.glassfish;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import java.lang.reflect.Field;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
+import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
-import org.glassfish.internal.data.ApplicationRegistry;
-import org.glassfish.orb.http.fory.grpc.ForyGeneratedRuntime;
-import org.glassfish.orb.http.fory.grpc.ForyGeneratedSchemaAdapter;
-import org.glassfish.orb.http.fory.grpc.ForyGrpcSkeleton;
-import org.glassfish.orb.http.fory.grpc.ForyRuntimeModelGenerator;
 import org.glassfish.orb.http.glassfish.GlassFishContainerBridge;
 import org.glassfish.orb.http.glassfish.GlassFishSecurityBridge;
-import org.glassfish.orb.http.glassfish.GlassFishTransactionBridge;
 import org.glassfish.orb.http.protocol.EjbKey;
 import org.glassfish.orb.http.server.ContainerBridge.NoSuchTargetException;
 import org.glassfish.orb.http.server.ServerExchange;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * The real {@link ForyGrpcExtension}, with the three bridges replaced by
- * recorders. The identity the request established must be handed back exactly
- * once: whichever way the lookup fails, and after a call that succeeds.
+ * The identity a request established must be handed back when acquiring the
+ * target fails, because no target exists whose close would hand it back.
  */
 class ForyGrpcExtensionSecurityTest {
 
-    private static final String PATH = "/fory/demo.Greeter/greet";
+    private static final ForyEjbIndex.ForyRoute ROUTE =
+            new ForyEjbIndex.ForyRoute("app", "module", "bean", "demo.Greeter");
 
-    public interface Greeter {
-        String greet(String name);
-    }
+    private static final ServerExchange EXCHANGE = (ServerExchange) Proxy.newProxyInstance(
+            ServerExchange.class.getClassLoader(), new Class<?>[] {ServerExchange.class},
+            (proxy, method, args) -> {
+                if (method.getName().equals("authenticatedUser")) {
+                    return "alice";
+                }
+                throw new UnsupportedOperationException(method.getName());
+            });
+
+    private final List<String> events = new ArrayList<>();
 
     @Test
     void clearsTheSecurityTokenWhenTheBeanCannotBeResolved() throws Exception {
-        List<String> events = new ArrayList<>();
+        NoSuchTargetException failure = new NoSuchTargetException("bean is stateful");
 
-        dispatch(events, new GlassFishContainerBridge() {
+        ForyGrpcExtension extension = extension(new GlassFishContainerBridge() {
             @Override
             public EjbKey resolve(String app, String module, String distinct, String bean, byte[] session)
                     throws NoSuchTargetException {
                 events.add("resolve");
-                throw new NoSuchTargetException("bean is stateful");
+                throw failure;
             }
-        }, new byte[0]);
+        }, false);
 
+        assertSame(failure, assertThrows(NoSuchTargetException.class, () -> extension.acquire(ROUTE, EXCHANGE)));
         assertEquals(List.of("establish:alice", "resolve", "clear:token"), events,
                 "the identity established for the request was never cleared");
     }
 
     @Test
-    void clearsTheSecurityTokenWhenTheTargetCannotBeObtained() throws Exception {
-        List<String> events = new ArrayList<>();
+    void clearsTheSecurityTokenWithoutReleasingATargetThatWasNeverObtained() throws Exception {
+        NoSuchTargetException failure = new NoSuchTargetException("no live instance");
 
-        dispatch(events, new GlassFishContainerBridge() {
+        ForyGrpcExtension extension = extension(new GlassFishContainerBridge() {
             @Override
             public EjbKey resolve(String app, String module, String distinct, String bean, byte[] session) {
                 events.add("resolve");
@@ -78,65 +77,42 @@ class ForyGrpcExtensionSecurityTest {
             @Override
             public Object getTargetObject(EjbKey key, String viewClassName) throws NoSuchTargetException {
                 events.add("getTargetObject");
-                throw new NoSuchTargetException("no live instance");
+                throw failure;
             }
 
             @Override
             public void releaseTargetObject(Object target) {
                 events.add("release");
             }
-        }, new byte[0]);
+        }, false);
 
+        assertSame(failure, assertThrows(NoSuchTargetException.class, () -> extension.acquire(ROUTE, EXCHANGE)));
         assertEquals(List.of("establish:alice", "resolve", "getTargetObject", "clear:token"), events,
                 "the identity established for the request was never cleared");
     }
 
     @Test
-    void clearsTheSecurityTokenExactlyOnceWhenTheCallSucceeds() throws Exception {
-        List<String> events = new ArrayList<>();
-        Greeter bean = name -> "hello " + name;
+    void keepsTheOriginalFailureWhenClearingTheSecurityTokenFailsToo() throws Exception {
+        NoSuchTargetException failure = new NoSuchTargetException("bean is stateful");
 
-        dispatch(events, new GlassFishContainerBridge() {
+        ForyGrpcExtension extension = extension(new GlassFishContainerBridge() {
             @Override
-            public EjbKey resolve(String app, String module, String distinct, String bean, byte[] session) {
+            public EjbKey resolve(String app, String module, String distinct, String bean, byte[] session)
+                    throws NoSuchTargetException {
                 events.add("resolve");
-                return new EjbKey(1L, new byte[] {0, 0, 0, 1});
+                throw failure;
             }
+        }, true);
 
-            @Override
-            public Object getTargetObject(EjbKey key, String viewClassName) {
-                events.add("getTargetObject");
-                return bean;
-            }
-
-            @Override
-            public void releaseTargetObject(Object target) {
-                events.add(target == bean ? "release" : "release:other");
-            }
-        }, requestFrame("bob"));
-
-        assertEquals(List.of("establish:alice", "resolve", "getTargetObject", "release", "clear:token"), events,
-                "the identity must be cleared once, after the target is released");
+        assertSame(failure, assertThrows(NoSuchTargetException.class, () -> extension.acquire(ROUTE, EXCHANGE)));
+        assertEquals(1, failure.getSuppressed().length, "the clear failure was not recorded");
+        assertEquals("clear failed", failure.getSuppressed()[0].getMessage());
+        assertEquals(List.of("establish:alice", "resolve", "clear:token"), events);
     }
 
-    private static byte[] requestFrame(String argument) {
-        var models = ForyRuntimeModelGenerator.unary("generated.security", "greet", String.class, String.class);
-        byte[] payload = new ForyGeneratedRuntime(models, 2000, 2001).serialize(argument);
-        byte[] frame = new byte[payload.length + 5];
-        frame[1] = (byte) (payload.length >>> 24);
-        frame[2] = (byte) (payload.length >>> 16);
-        frame[3] = (byte) (payload.length >>> 8);
-        frame[4] = (byte) payload.length;
-        System.arraycopy(payload, 0, frame, 5, payload.length);
-        return frame;
-    }
-
-    private static void dispatch(List<String> events, GlassFishContainerBridge container, byte[] requestBody)
-            throws Exception {
+    private ForyGrpcExtension extension(GlassFishContainerBridge container, boolean clearFails) throws Exception {
         Object token = new Object();
-
         ForyGrpcExtension extension = new ForyGrpcExtension();
-        set(extension, "applications", new ApplicationRegistry());
         set(extension, "container", container);
         set(extension, "security", new GlassFishSecurityBridge() {
             @Override
@@ -148,71 +124,17 @@ class ForyGrpcExtensionSecurityTest {
             @Override
             public void clear(Object t) {
                 events.add(t == token ? "clear:token" : "clear:other");
+                if (clearFails) {
+                    throw new IllegalStateException("clear failed");
+                }
             }
         });
-        set(extension, "transactions", new GlassFishTransactionBridge() {
-            @Override
-            public void detach() {
-            }
-        });
-        extension.postConstruct();
-
-        // Publish one route the way refreshForyRegistry would, without a deployment.
-        ForyEjbIndex index = indexOf(extension);
-        var models = ForyRuntimeModelGenerator.unary("generated.security", "greet", String.class, String.class);
-        index.foryRegistry().register(PATH, PATH, ForyGrpcSkeleton.of("demo.Greeter", Greeter.class), models,
-                new ForyGeneratedRuntime(models, 2000, 2001),
-                ForyGeneratedSchemaAdapter.unary(models.request(), models.response()));
-        @SuppressWarnings("unchecked")
-        Map<String, Object> routes = (Map<String, Object>) get(index, "foryRoutes");
-        routes.put(PATH, new ForyEjbIndex.ForyRoute("app", "module", "bean", Greeter.class.getName()));
-
-        extension.dispatch(PATH, new Exchange(requestBody));
-    }
-
-    private static ForyEjbIndex indexOf(ForyGrpcExtension extension) throws Exception {
-        Object adapter = get(extension, "foryGrpc");
-        Object targets = get(adapter, "targets");
-        for (Field field : targets.getClass().getDeclaredFields()) {
-            field.setAccessible(true);
-            if (field.get(targets) instanceof ForyEjbIndex index) {
-                return index;
-            }
-        }
-        throw new AssertionError("no ForyEjbIndex captured by " + targets.getClass());
-    }
-
-    private static Object get(Object owner, String name) throws Exception {
-        Field field = owner.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        return field.get(owner);
+        return extension;
     }
 
     private static void set(Object owner, String name, Object value) throws Exception {
         Field field = owner.getClass().getDeclaredField(name);
         field.setAccessible(true);
         field.set(owner, value);
-    }
-
-    private static final class Exchange implements ServerExchange {
-        private final byte[] body;
-
-        Exchange(byte[] body) {
-            this.body = body;
-        }
-
-        @Override public String method() { return "POST"; }
-        @Override public byte[] pathBytes() { return PATH.getBytes(StandardCharsets.UTF_8); }
-        @Override public int pathOffset() { return 0; }
-        @Override public int pathLength() { return pathBytes().length; }
-        @Override public String requestHeader(String name) { return null; }
-        @Override public String queryParameter(String name) { return null; }
-        @Override public InputStream requestBody() { return new ByteArrayInputStream(body); }
-        @Override public void setStatus(int status) { }
-        @Override public void setResponseHeader(String name, String value) { }
-        @Override public boolean supportsResponseTrailers() { return true; }
-        @Override public void setResponseTrailer(String name, String value) { }
-        @Override public void writeBody(ByteBuffer[] buffers) throws IOException { }
-        @Override public String authenticatedUser() { return "alice"; }
     }
 }

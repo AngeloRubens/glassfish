@@ -3,7 +3,7 @@ name: Fory gRPC security fix
 on:
   workflow_dispatch:
   push:
-    branches: [ 'fix/fory-grpc-security-clear' ]
+    branches: [ 'fix/fory-grpc-security-clear-v2' ]
 
 jobs:
   verify:
