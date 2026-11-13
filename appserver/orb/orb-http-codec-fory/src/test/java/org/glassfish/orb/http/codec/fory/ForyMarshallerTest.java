@@ -297,4 +297,85 @@ class ForyMarshallerTest {
             assertEquals("x".repeat(4096), r.readObject());
         }
     }
+
+    @Test
+    @DisplayName("a streamed byte[] frame over several chunks has a correct header")
+    void streamedFrameSpanningManyChunks() throws Exception {
+        System.setProperty("org.glassfish.orb.http.codec.fory.streaming", "true");
+        try {
+            byte[] value = new byte[200];
+            new java.util.Random(9L).nextBytes(value);
+            ChunkedOutput out = new ChunkedOutput(64);
+            try (Marshaller.ObjectWriter w = marshaller.newWriter(out)) {
+                w.writeObject(value);
+                w.flush();
+            }
+
+            byte[] bytes = out.toByteArray();
+            assertEquals(0, bytes[0]);
+            assertEquals(out.size() - 5, java.nio.ByteBuffer.wrap(bytes, 1, 4).getInt());
+            assertTrue(out.size() > 192, "the frame must span four chunks");
+
+            try (Marshaller.ObjectReader r = marshaller.newReader(
+                    new ChunkedInput(out.toByteBuffers()), getClass().getClassLoader(), ALLOW_ALL)) {
+                assertTrue(java.util.Arrays.equals(value, (byte[]) r.readObject()));
+            }
+        } finally {
+            System.clearProperty("org.glassfish.orb.http.codec.fory.streaming");
+        }
+    }
+
+    @Test
+    @DisplayName("a header straddling a chunk boundary round-trips at every offset")
+    void streamedHeaderStraddlingChunkBoundary() throws Exception {
+        System.setProperty("org.glassfish.orb.http.codec.fory.streaming", "true");
+        try {
+            int chunk = 32;
+            for (int prefix = chunk - 4; prefix < chunk; prefix++) {
+                ChunkedOutput out = new ChunkedOutput(chunk);
+                out.write(new byte[prefix]);
+                try (Marshaller.ObjectWriter w = marshaller.newWriter(out)) {
+                    w.writeObject("straddle " + prefix);
+                    w.flush();
+                }
+                ChunkedInput in = new ChunkedInput(out.toByteBuffers());
+                assertEquals(prefix, in.readNBytes(prefix).length);
+                try (Marshaller.ObjectReader r = marshaller.newReader(
+                        in, getClass().getClassLoader(), ALLOW_ALL)) {
+                    assertEquals("straddle " + prefix, r.readObject());
+                }
+            }
+        } finally {
+            System.clearProperty("org.glassfish.orb.http.codec.fory.streaming");
+        }
+    }
+
+    @Test
+    @DisplayName("a large String, a small Integer and a large byte[] in sequence round-trip")
+    void mixedSequenceOverSmallChunks() throws Exception {
+        System.setProperty("org.glassfish.orb.http.codec.fory.streaming", "true");
+        try {
+            String text = "y".repeat(300);
+            byte[] blob = new byte[500];
+            new java.util.Random(4L).nextBytes(blob);
+            ChunkedOutput out = new ChunkedOutput(32);
+            out.write(new byte[30]);
+            try (Marshaller.ObjectWriter w = marshaller.newWriter(out)) {
+                w.writeObject(text);
+                w.writeObject(7);
+                w.writeObject(blob);
+                w.flush();
+            }
+
+            ChunkedInput in = new ChunkedInput(out.toByteBuffers());
+            assertEquals(30, in.readNBytes(30).length);
+            try (Marshaller.ObjectReader r = marshaller.newReader(in, getClass().getClassLoader(), ALLOW_ALL)) {
+                assertEquals(text, r.readObject());
+                assertEquals(7, r.readObject());
+                assertTrue(java.util.Arrays.equals(blob, (byte[]) r.readObject()));
+            }
+        } finally {
+            System.clearProperty("org.glassfish.orb.http.codec.fory.streaming");
+        }
+    }
 }

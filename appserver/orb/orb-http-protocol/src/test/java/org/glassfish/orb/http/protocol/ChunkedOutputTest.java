@@ -153,4 +153,61 @@ class ChunkedOutputTest {
         assertEquals(13L, buffered);
         assertArrayEquals(new byte[] {1, 2, 3, 4, 5, 7, 0, 0, 0, 3, 9, 9, 9}, out.toByteArray());
     }
+
+    @Test
+    @DisplayName("closing a frame twice leaves the same bytes")
+    void closingAFrameTwiceIsIdempotent() throws IOException {
+        ChunkedOutput out = new ChunkedOutput(8);
+        ChunkedOutput.Frame f = out.beginFrame((byte) 1);
+        out.write(new byte[] {1, 2, 3});
+        f.close();
+        byte[] first = out.toByteArray();
+        out.write(new byte[] {4, 5, 6, 7});
+        f.close();
+        byte[] expected = new byte[] {1, 0, 0, 0, 3, 1, 2, 3, 4, 5, 6, 7};
+        assertArrayEquals(expected, out.toByteArray());
+        assertArrayEquals(java.util.Arrays.copyOf(expected, 8), java.util.Arrays.copyOf(first, 8));
+    }
+
+    @Test
+    @DisplayName("a frame spanning several chunks carries the right header")
+    void frameSpanningManyChunks() throws IOException {
+        ChunkedOutput out = new ChunkedOutput(64);
+        ChunkedOutput.Frame f = out.beginFrame((byte) 0);
+        byte[] payload = new byte[200];
+        new Random(5L).nextBytes(payload);
+        out.write(payload);
+        f.close();
+
+        byte[] bytes = out.toByteArray();
+        assertEquals(205, bytes.length);
+        assertEquals(0, bytes[0]);
+        assertEquals(200, ByteBuffer.wrap(bytes, 1, 4).getInt());
+        assertArrayEquals(payload, java.util.Arrays.copyOfRange(bytes, 5, 205));
+        assertArrayEquals(bytes, flatten(out.toByteBuffers()));
+    }
+
+    @Test
+    @DisplayName("a header may straddle a chunk boundary at any offset")
+    void headerSpanningChunkBoundary() throws IOException {
+        int chunk = 16;
+        for (int prefix = chunk - 4; prefix < chunk; prefix++) {
+            ChunkedOutput out = new ChunkedOutput(chunk);
+            out.write(new byte[prefix]);
+            ChunkedOutput.Frame f = out.beginFrame((byte) 7);
+            out.write(new byte[] {9, 9, 9, 9, 9});
+            f.close();
+
+            byte[] bytes = out.toByteArray();
+            assertEquals(prefix + 10, bytes.length, "prefix " + prefix);
+            assertEquals(7, bytes[prefix], "prefix " + prefix);
+            assertEquals(5, ByteBuffer.wrap(bytes, prefix + 1, 4).getInt(), "prefix " + prefix);
+            assertArrayEquals(bytes, flatten(out.toByteBuffers()), "prefix " + prefix);
+            long buffered = 0;
+            for (ByteBuffer b : out.toByteBuffers()) {
+                buffered += b.remaining();
+            }
+            assertEquals(out.size(), buffered, "prefix " + prefix);
+        }
+    }
 }
