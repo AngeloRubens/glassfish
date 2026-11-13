@@ -1,8 +1,8 @@
-name: Fix ChunkedOutput padding
+name: Fix ChunkedOutput padding v2
 
 on:
   push:
-    branches: [ 'fix/chunkedoutput-padding', 'check/chunkedoutput-revert' ]
+    branches: [ 'fix/chunkedoutput-padding-v2', 'check/chunkedoutput-v2-revert' ]
   workflow_dispatch:
 
 jobs:

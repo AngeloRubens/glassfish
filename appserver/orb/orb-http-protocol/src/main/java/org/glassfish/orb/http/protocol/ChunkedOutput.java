@@ -141,6 +141,7 @@ public final class ChunkedOutput extends OutputStream {
         return new Frame(headerPos);
     }
 
+    // Invariant: every chunk in the list is exactly chunkSize long, so pos / chunkSize indexes it directly.
     private void patch(long pos, byte value) {
         long idx = pos / chunkSize;
         int offset = (int) (pos % chunkSize);
