@@ -128,3 +128,4 @@ class TransactionDispatcherTest {
             events.add("clear(" + token + ")");
         }
     }
+}
