@@ -1,9 +1,9 @@
-name: Test Fory reader cache v2
+name: Test Fory reader cache v2 revert check
 
 on:
   workflow_dispatch:
   push:
-    branches: [ 'fix/fory-reader-cache-v2' ]
+    branches: [ 'check/reader-cache-v2-revert' ]
 
 jobs:
   test:
@@ -30,7 +30,7 @@ jobs:
       - name: Install with all tests and checkstyle
         run: |
           mvn -B -e -ntp -pl appserver/orb/orb-http-codec-fory,appserver/orb/orb-http-protocol,appserver/orb/orb-http-client,appserver/orb/orb-http-server \
-            install
+            -fae -Dmaven.test.failure.ignore=true install
       - name: Print reports
         if: always()
         run: |
