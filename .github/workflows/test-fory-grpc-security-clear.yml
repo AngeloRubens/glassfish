@@ -18,11 +18,17 @@ jobs:
           java-version: '21'
           cache: maven
 
+      - name: Build the modules the test depends on
+        shell: bash
+        run: |
+          mvn -B -e -ntp -Pqa,snapshots -Dcheckstyle.skip=true -Denforcer.skip=true -DskipTests \
+            -pl appserver/orb/orb-http-fory-grpc -am install 2>&1 | tee build.log
+
       - name: Run the test
         shell: bash
         run: |
-          mvn -B -e -ntp -Pqa,snapshots -Dcheckstyle.skip=true -Denforcer.skip=true -DfailIfNoTests=false -Dsurefire.failIfNoSpecifiedTests=false \
-            -Dtest=ForyGrpcExtensionSecurityTest -pl appserver/orb/orb-http-fory-grpc -am test 2>&1 | tee mvn.log
+          mvn -B -e -ntp -Pqa,snapshots -Dcheckstyle.skip=true -Denforcer.skip=true \
+            -Dtest=ForyGrpcExtensionSecurityTest -pl appserver/orb/orb-http-fory-grpc test 2>&1 | tee mvn.log
 
       - name: Print failing assertions
         if: always()
