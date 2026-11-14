@@ -355,7 +355,7 @@ public final class HttpEjbClient implements AutoCloseable {
         final String invocationId = newInvocationId();
         final HttpTransport.Request request;
         try {
-            request = buildInvocation(locator, viewClass, method, args, invocationId, rollbackOnly);
+            request = buildInvocation(locator, viewClass, method, args, invocationId, false);
         } catch (IOException e) {
             return CompletableFuture.failedFuture(e);
         }
