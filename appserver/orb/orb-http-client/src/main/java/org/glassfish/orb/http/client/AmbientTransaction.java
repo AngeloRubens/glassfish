@@ -243,8 +243,6 @@ final class AmbientTransaction {
             return false;
         }
         if (standing == Standing.REFUSED) {
-            // A branch left on the thread must not outlive the refusal.
-            ClientTransactionContext.disassociate();
             throw new EJBException("the caller's transaction is not in a state a remote call can join (status "
                     + status + "), so the call to " + endpoint + " was not made");
         }
