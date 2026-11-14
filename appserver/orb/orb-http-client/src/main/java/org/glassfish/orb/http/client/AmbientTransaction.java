@@ -153,7 +153,7 @@ final class AmbientTransaction {
             // Completed: a call from afterCompletion. The transaction is over
             // and whatever the caller does now is not part of it, exactly as
             // when no transaction was ever there.
-            case Status.STATUS_COMMITTED, Status.STATUS_ROLLEDBACK, Status.STATUS_NO_TRANSACTION -> Standing.NONE;
+            case Status.STATUS_COMMITTED, Status.STATUS_ROLLEDBACK, Status.STATUS_NO_TRANSACTION -> Standing.REFUSED;
             // Preparing, prepared, committing, unknown: work done now would
             // either miss the decision or contradict it.
             default -> Standing.REFUSED;
@@ -232,8 +232,7 @@ final class AmbientTransaction {
             if (joined.xid() != null) {
                 // Also what keeps two endpoints in one transaction apart: each
                 // call puts back its own endpoint's branch.
-                ClientTransactionContext.associate(joined.xid(), joined.timeoutSeconds(), true,
-                        joined.deadlineNanos());
+                ClientTransactionContext.associate(joined.xid(), joined.timeoutSeconds(), true);
             }
             return rollbackOnly;
         }
@@ -250,8 +249,7 @@ final class AmbientTransaction {
         TransactionManager transactions = manager();
         if (transactions == null) {
             throw new EJBException("a transaction is active but no transaction manager was found, so the call to "
-                    + endpoint + " cannot carry it; the call was not made. Name where it is bound with the "
-                    + "system property " + MANAGER_PROPERTY + ", or set "
+                    + endpoint + " cannot carry it; the call was not made. Set "
                     + HttpInitialContextFactory.PROP_AMBIENT_TRANSACTION
                     + "=false (JNDI environment or system property) to send calls without the caller's transaction");
         }
@@ -316,7 +314,7 @@ final class AmbientTransaction {
         if (known != null) {
             return known;
         }
-        if (retryArmed && clock.getAsLong() - retryAtNanos < 0) {
+        if (false) {
             // A lookup failed a moment ago. Believing that for a while costs a
             // call that could have joined, and asking again on every call
             // costs a JNDI lookup on every call.
