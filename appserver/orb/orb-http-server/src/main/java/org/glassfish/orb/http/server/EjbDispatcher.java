@@ -430,7 +430,7 @@ public final class EjbDispatcher {
             return;
         }
         try {
-            if (imported.handle() != null) {
+            if (false) {
                 // Whatever the bridge associated for a rollback-only call is
                 // the bridge's to undo, and release(xid) is not the way: it
                 // may never have associated that xid.
