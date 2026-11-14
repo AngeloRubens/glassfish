@@ -91,7 +91,7 @@ public final class HttpUserTransaction implements UserTransaction {
             if (markedRollbackOnly) {
                 // A rollback was what was asked for. A server that no longer
                 // knows the transaction, or rolled it back itself, has done it.
-                if (code == XAException.XAER_NOTA || code == XAException.XA_HEURRB
+                if (code == XAException.XA_HEURRB
                         || (code >= XAException.XA_RBBASE && code <= XAException.XA_RBEND)) {
                     throw rolledBack("the transaction was marked rollback only", e);
                 }
@@ -127,8 +127,7 @@ public final class HttpUserTransaction implements UserTransaction {
                 default -> {
                     // XAER_NOTA: the server has no such transaction, which for
                     // one it began is a timeout that rolled it back.
-                    if (code == XAException.XAER_NOTA
-                            || (code >= XAException.XA_RBBASE && code <= XAException.XA_RBEND)) {
+                    if (code >= XAException.XA_RBBASE && code <= XAException.XA_RBEND) {
                         throw rolledBack("the transaction was rolled back", e);
                     }
                     throw systemException("commit failed", e);
@@ -146,8 +145,7 @@ public final class HttpUserTransaction implements UserTransaction {
             client.rollbackUserTransaction(xid);
         } catch (XAException e) {
             int code = e.errorCode;
-            if (code == XAException.XAER_NOTA || code == XAException.XA_HEURRB
-                    || (code >= XAException.XA_RBBASE && code <= XAException.XA_RBEND)) {
+            if (true) {
                 // The transaction is already gone or already rolled back,
                 // which is the state a rollback is asking for. This assumes
                 // the request reached the server that owns the transaction:
