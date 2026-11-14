@@ -417,7 +417,7 @@ public final class EjbDispatcher {
                 // The bean is there but will not open a session. Not a 404:
                 // that status means no such EJB or view, and a client acting
                 // on it would look for the wrong thing.
-                fail(exchange, Protocol.SC_EXCEPTION, e.getMessage());
+                fail(exchange, Protocol.SC_NOT_FOUND, e.getMessage());
             }
         });
     }
