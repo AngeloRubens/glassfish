@@ -198,7 +198,7 @@ public final class ForyGrpcServerAdapter {
             frame = frame(binding.runtime().serialize(response));
         } catch (RuntimeException e) {
             LOG.log(Level.WARNING, "cannot encode the response of " + path, e);
-            answerWithStatus(exchange, STATUS_INTERNAL, "cannot encode the response");
+            answerWithStatus(exchange, STATUS_UNKNOWN, e.toString());
             return;
         }
 
