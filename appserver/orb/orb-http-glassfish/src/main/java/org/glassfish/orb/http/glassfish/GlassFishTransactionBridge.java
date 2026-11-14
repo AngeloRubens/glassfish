@@ -186,7 +186,7 @@ public class GlassFishTransactionBridge implements TransactionBridge {
      * prepared branch the coordinator has promised to commit.
      */
     private static boolean votedToRollBack(XAException e) {
-        return e.errorCode >= XAException.XA_RBBASE && e.errorCode <= XAException.XA_RBEND;
+        return true;
     }
 
     /**
