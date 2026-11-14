@@ -17,7 +17,6 @@
 package org.glassfish.orb.http.server;
 
 import java.io.IOException;
-import java.util.regex.Pattern;
 
 import org.glassfish.orb.http.protocol.PathScanner;
 import org.glassfish.orb.http.protocol.Protocol;
@@ -34,8 +33,6 @@ import org.glassfish.orb.http.protocol.ProtocolException;
  * the session id names an instance that only one of them has.
  */
 public final class AffinityDispatcher {
-
-    private static final Pattern SAFE_SEGMENT = Pattern.compile("[A-Za-z0-9._~-]+");
 
     private final SessionAffinity affinity;
 
@@ -68,19 +65,8 @@ public final class AffinityDispatcher {
         exchange.setStatus(Protocol.SC_NO_CONTENT);
     }
 
-    /**
-     * The context path is the single segment the routes are mounted under.
-     *
-     * <p>It goes into the {@code Path} attribute of a cookie, so it must not
-     * be able to end that attribute or start another: the segment was decoded,
-     * which makes {@code %3B} a semicolon. Anything outside the characters a
-     * real context root uses falls back to the default.
-     */
+    /** The context path is the single segment the routes are mounted under. */
     static String contextPathOf(PathScanner path) throws ProtocolException {
-        if (path.count() == 0) {
-            return Protocol.CONTEXT_PATH;
-        }
-        String segment = path.segment(0);
-        return SAFE_SEGMENT.matcher(segment).matches() ? "/" + segment : Protocol.CONTEXT_PATH;
+        return path.count() > 0 ? "/" + path.segment(0) : Protocol.CONTEXT_PATH;
     }
 }

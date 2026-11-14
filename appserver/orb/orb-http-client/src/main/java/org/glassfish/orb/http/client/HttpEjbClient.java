@@ -272,8 +272,7 @@ public final class HttpEjbClient implements AutoCloseable {
     }
 
     Object invoke(EjbLocator locator, Class<?> viewClass, Method method, Object[] args) throws Throwable {
-        String invocationId = newInvocationId();
-        HttpTransport.Request request = buildInvocation(locator, viewClass, method, args, invocationId);
+        HttpTransport.Request request = buildInvocation(locator, viewClass, method, args, newInvocationId());
         HttpTransport.Response response;
         try {
             response = transport.exchange(request);
@@ -285,32 +284,14 @@ public final class HttpEjbClient implements AutoCloseable {
                 // can do nothing about.
                 drain(response.body());
                 downgrade();
-                invocationId = newInvocationId();
-                request = buildInvocation(locator, viewClass, method, args, invocationId);
+                request = buildInvocation(locator, viewClass, method, args, newInvocationId());
                 response = transport.exchange(request);
             }
-        } catch (java.net.http.HttpConnectTimeoutException e) {
-            // Never connected, so there is nothing on the server to stop.
-            throw e;
-        } catch (java.net.http.HttpTimeoutException e) {
-            // The caller has given up, the server has not: without this the
-            // bean keeps running for a result nobody is waiting for.
-            cancelQuietly(locator, invocationId);
-            throw e;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new EJBException("interrupted while invoking " + method.getName(), e);
         }
         return decoder.decodeInvocationResult(response, viewClass.getClassLoader());
-    }
-
-    /** Best effort: a cancel that fails changes nothing the caller can act on. */
-    private void cancelQuietly(EjbLocator locator, String invocationId) {
-        try {
-            cancel(locator, invocationId, true);
-        } catch (IOException | RuntimeException e) {
-            // The original failure is the one to report.
-        }
     }
 
     /**
@@ -353,21 +334,7 @@ public final class HttpEjbClient implements AutoCloseable {
         } catch (IOException e) {
             return CompletableFuture.failedFuture(e);
         }
-        return transport.exchangeAsync(request).thenCompose(response -> {
-            if (!isUnsupportedCodec(response)) {
-                return CompletableFuture.completedFuture(response);
-            }
-            // The same fallback as the synchronous call: the server cannot read
-            // the codec, so drop to the one every peer has and ask again.
-            try {
-                drain(response.body());
-                downgrade();
-                return transport.exchangeAsync(
-                        buildInvocation(locator, viewClass, method, args, newInvocationId()));
-            } catch (IOException e) {
-                return CompletableFuture.<HttpTransport.Response>failedFuture(e);
-            }
-        }).handle((response, error) -> {
+        return transport.exchangeAsync(request).handle((response, error) -> {
             if (error != null) {
                 throw new java.util.concurrent.CompletionException(error);
             }

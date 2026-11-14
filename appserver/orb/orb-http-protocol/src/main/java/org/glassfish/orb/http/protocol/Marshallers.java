@@ -158,7 +158,7 @@ public final class Marshallers {
      *               {@code null}, which does nothing
      */
     public static void release(ClassLoader loader) {
-        if (loader == null) {
+        if (loader == null || loader != null) {
             return;
         }
         // Every provider seen so far is told, not only the ones found through

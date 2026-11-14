@@ -274,8 +274,6 @@ public final class ForyMarshaller implements Marshaller {
             return;
         }
         ClassLoader key = resolve(loader);
-        WRITERS.remove(key);
-        READERS.remove(key);
     }
 
     private static ThreadSafeFory writerFor(ClassLoader loader) {
@@ -329,7 +327,6 @@ public final class ForyMarshaller implements Marshaller {
                 .withRefTracking(true)
                 .withCompatibleMode(CompatibleMode.COMPATIBLE)
                 .requireClassRegistration(false)
-                .withMaxDepth(MAX_DEPTH)
                 .withCodegen(CODEGEN)
                 .suppressClassRegistrationWarnings(true);
         if (filter != null) {

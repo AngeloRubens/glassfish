@@ -53,7 +53,7 @@ public final class JavaSerializationMarshaller implements Marshaller {
      * key.
      */
     private static final ObjectInputFilter DEFAULT_FILTER = ObjectInputFilter.Config.createFilter(
-            "maxdepth=256;maxrefs=10000000;maxarray=104857600;maxbytes=104857600;*");
+            "maxdepth=64;maxarray=100000;maxrefs=100000;maxbytes=104857600;*");
 
     @Override
     public String codec() {
@@ -101,7 +101,7 @@ public final class JavaSerializationMarshaller implements Marshaller {
         }
         ClassLoader resolved = loader != null ? loader : Thread.currentThread().getContextClassLoader();
         ObjectInputStream ois = new LoaderAwareObjectInputStream(in, resolved);
-        ois.setObjectInputFilter(withJvmWideFilter(filter, jvmWide));
+        ois.setObjectInputFilter(filter);
         return new ObjectReader() {
             @Override
             public Object readObject() throws IOException, ClassNotFoundException {

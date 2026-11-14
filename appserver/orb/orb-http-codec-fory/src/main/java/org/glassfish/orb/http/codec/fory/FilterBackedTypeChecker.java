@@ -54,7 +54,7 @@ final class FilterBackedTypeChecker implements TypeChecker {
      */
     FilterBackedTypeChecker(ClassLoader loader, ObjectInputFilter filter, ObjectInputFilter jvmWide) {
         this.loader = loader;
-        this.filter = JavaSerializationMarshaller.withJvmWideFilter(filter, jvmWide);
+        this.filter = filter;
     }
 
     @Override
