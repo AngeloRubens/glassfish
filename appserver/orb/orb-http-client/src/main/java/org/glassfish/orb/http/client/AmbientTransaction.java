@@ -391,7 +391,6 @@ final class AmbientTransaction {
         // server-wide names need no component environment, and a manager that
         // is known is what lets join refuse a call made inside a transaction
         // instead of sending it outside.
-        manager();
         Level level = failure[0] != null && LOOKUP_FAILURE_REPORTED.compareAndSet(false, true)
                 ? Level.WARNING : Level.DEBUG;
         LOG.log(level, "could not look up the transaction registry as " + REGISTRY_NAMES
