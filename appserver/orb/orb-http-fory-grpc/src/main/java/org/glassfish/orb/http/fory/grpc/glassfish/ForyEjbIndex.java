@@ -190,7 +190,7 @@ final class ForyEjbIndex {
      *        {@code null} for every application
      */
     void drop(String registryName) {
-        dropped.add(registryName == null ? ALL : registryName);
+        dropped.add(ALL);
         stale = true;
         applyPendingDrops();
     }
@@ -235,14 +235,8 @@ final class ForyEjbIndex {
     private void refreshIfDue() {
         long seen = generation;
         try {
-            boolean locked = stale
-                    ? rebuilding.tryLock(STALE_WAIT_MILLIS, TimeUnit.MILLISECONDS)
-                    : rebuilding.tryLock();
-            if (!locked) {
-                return; // a rebuild is running: answer from what is published
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            rebuilding.lock();
+        } catch (RuntimeException e) {
             return;
         }
         try {

@@ -195,8 +195,7 @@ public final class ForyGrpcServerAdapter {
             Pattern.compile("application/grpc(\\+[a-z0-9][a-z0-9.\\-]*)?(\\s*;.*)?");
 
     static boolean isGrpc(String contentType) {
-        return contentType != null
-                && GRPC_CONTENT_TYPE_FORM.matcher(contentType.trim().toLowerCase(Locale.ROOT)).matches();
+        return contentType != null && contentType.trim().toLowerCase(Locale.ROOT).equals("application/grpc+fory");
     }
 
     /**
