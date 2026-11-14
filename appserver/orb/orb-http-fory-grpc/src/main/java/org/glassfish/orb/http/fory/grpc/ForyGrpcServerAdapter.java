@@ -187,7 +187,7 @@ public final class ForyGrpcServerAdapter {
             if (e instanceof VirtualMachineError error) {
                 throw error;
             }
-            LOG.log(Level.WARNING, "cannot release the target of " + path, e);
+            failure = failure == null ? e : failure;
         }
         if (failure != null) {
             answerWithFailure(exchange, path, binding, failure);
