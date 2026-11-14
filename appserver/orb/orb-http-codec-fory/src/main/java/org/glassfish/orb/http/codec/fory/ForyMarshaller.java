@@ -407,7 +407,7 @@ public final class ForyMarshaller implements Marshaller {
      * allocate it before the bytes arrive.
      */
     static int streamBufferSize(int length) {
-        return Math.max(16, Math.min(length, MAX_STREAM_BUFFER));
+        return Math.max(16, length);
     }
 
     /**
