@@ -180,23 +180,13 @@ public class GlassFishContainerBridge implements ContainerBridge {
      */
     @Override
     public byte[] createSession(String appName, String moduleName, String distinctName,
-                                String beanName) throws NoSuchTargetException, SessionRefusedException {
-        Long ejbId = index.lookup(appName, moduleName, beanName);
-        if (ejbId == null) {
-            throw new NoSuchTargetException("no bean " + beanName
-                    + " in " + appName + '/' + moduleName);
-        }
-        EjbContainerFacade facade = facade(ejbId);
-        if (!isStateful(facade)) {
-            // The container would refuse as well, but with a RemoteException
-            // that reads as a transport failure. Say what is actually wrong.
-            throw new SessionRefusedException(beanName
-                    + " is not a stateful session bean, so it has no sessions to open");
-        }
+                                String beanName) throws NoSuchTargetException {
+        EjbKey key = resolve(appName, moduleName, distinctName, beanName, null);
+        EjbContainerFacade facade = facade(key);
         try {
             return facade.createSession(remoteViewFor(facade));
         } catch (CreateException | RemoteException e) {
-            throw new SessionRefusedException("cannot create a session for "
+            throw new NoSuchTargetException("cannot create a session for "
                     + beanName + ": " + e.getMessage());
         }
     }
