@@ -38,7 +38,6 @@ public final class ForyViewMethods {
         return Arrays.stream(view.getMethods())
                 .filter(method -> method.getDeclaringClass() != Object.class)
                 .filter(method -> Modifier.isPublic(method.getModifiers()))
-                .filter(method -> !Modifier.isStatic(method.getModifiers()))
                 .filter(method -> !method.isSynthetic() && !method.isBridge())
                 .sorted(Comparator.comparing(Method::getName)
                         .thenComparing(method -> Arrays.toString(method.getParameterTypes())))

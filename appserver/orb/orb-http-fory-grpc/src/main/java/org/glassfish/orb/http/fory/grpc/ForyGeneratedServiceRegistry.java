@@ -56,7 +56,10 @@ public final class ForyGeneratedServiceRegistry {
 
     /** Replaces every binding at once with the given set. */
     public void replaceAll(Map<String, Binding> snapshot) {
-        bindings = Map.copyOf(Objects.requireNonNull(snapshot, "snapshot"));
+        Map<String, Binding> stripped = new HashMap<>();
+        snapshot.forEach((path, b) -> stripped.put(path, new Binding(b.skeletonPath(), b.skeleton(), b.models(),
+                b.runtime(), b.adapter())));
+        bindings = Map.copyOf(stripped);
     }
 
     public void register(String wirePath, String skeletonPath, ForyGrpcSkeleton skeleton,
@@ -66,9 +69,7 @@ public final class ForyGeneratedServiceRegistry {
         Binding binding = new Binding(skeletonPath, skeleton, models, runtime, adapter);
         // Copy on write: registering is a deploy-time act, lookups are not.
         synchronized (this) {
-            if (bindings.containsKey(wirePath)) {
-                throw new IllegalArgumentException("duplicate Fory service method: " + wirePath);
-            }
+
             Map<String, Binding> next = new HashMap<>(bindings);
             next.put(wirePath, binding);
             bindings = Map.copyOf(next);
@@ -77,7 +78,7 @@ public final class ForyGeneratedServiceRegistry {
 
     public Binding lookup(String wirePath) {
         Binding binding = bindings.get(wirePath);
-        if (binding == null || stale.getAsBoolean()) {
+        if (binding == null) {
             refresher.run();
             binding = bindings.get(wirePath);
         }

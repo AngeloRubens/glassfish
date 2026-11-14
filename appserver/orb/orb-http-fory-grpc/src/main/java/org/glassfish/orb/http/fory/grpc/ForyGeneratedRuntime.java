@@ -44,7 +44,6 @@ public final class ForyGeneratedRuntime {
                 // building thread's context loader happens to be: that one
                 // can be an application's, and this runtime would then keep
                 // the application's classes alive after it is undeployed.
-                .withClassLoader(models.request().getClassLoader())
                 .buildThreadSafeFory();
         fory.register(models.request(), requestTypeId);
         fory.register(models.response(), responseTypeId);

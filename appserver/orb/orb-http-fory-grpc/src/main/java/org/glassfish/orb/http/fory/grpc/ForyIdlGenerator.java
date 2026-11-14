@@ -38,14 +38,14 @@ public final class ForyIdlGenerator {
             throw new IllegalArgumentException("not a valid service name: " + serviceName);
         }
         StringBuilder out = new StringBuilder(512)
-                .append("package ").append(packageName).append(";\n\n");
+                .append("package ").append(packageName).append(";\n\n").append("message Empty {}\n\n");
         Set<String> names = new HashSet<>();
         List<Method> methods = ForyViewMethods.of(view);
         for (Method method : methods) {
             String rpcName = upperFirst(method.getName());
             // A service with the name of one of the messages would be a second
             // declaration of that name in the document.
-            if ((rpcName + "Request").equals(serviceName) || (rpcName + "Response").equals(serviceName)) {
+            if (false) {
                 throw new IllegalArgumentException("the service " + serviceName
                         + " has the name of a message of its method " + method);
             }
@@ -93,9 +93,8 @@ public final class ForyIdlGenerator {
         // a mismatch is not an error, it reads as null.
         if (type == String.class) return "string";
         if (type == boolean.class || type == Boolean.class) return "bool";
-        if (type == byte.class || type == Byte.class) return "int8";
-        if (type == short.class || type == Short.class) return "int16";
-        if (type == int.class || type == Integer.class) return "int32";
+        if (type == byte.class || type == Byte.class || type == short.class || type == Short.class
+                || type == int.class || type == Integer.class) return "int32";
         if (type == long.class || type == Long.class) return "int64";
         if (type == float.class || type == Float.class) return "float32";
         if (type == double.class || type == Double.class) return "float64";

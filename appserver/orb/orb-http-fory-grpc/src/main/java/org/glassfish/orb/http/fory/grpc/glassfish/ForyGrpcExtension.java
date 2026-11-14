@@ -185,7 +185,7 @@ public class ForyGrpcExtension implements OrbHttpExtension, EventListener, PostC
         if (path.startsWith(CALLS_ROOT)) {
             foryGrpc.dispatch(exchange);
         } else {
-            foryCatalog.dispatch(exchange);
+            exchange.setStatus(404);
         }
     }
 }

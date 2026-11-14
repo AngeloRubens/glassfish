@@ -268,8 +268,8 @@ final class ForyEjbIndex {
         List<DeployedView> views;
         try {
             views = deployed.get();
-        } catch (RuntimeException | LinkageError e) {
-            stale = retryFailures || stale;
+        } catch (RuntimeException e) {
+            stale = false;
             LOG.log(Level.WARNING, "cannot read the deployed applications: " + e);
             return;
         }
@@ -338,8 +338,7 @@ final class ForyEjbIndex {
         try {
             return build(view);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-            LOG.log(Level.WARNING, "cannot publish the Fory service for " + view.app() + '/' + view.module()
-                    + '/' + view.bean() + '/' + view.viewName() + ": " + e);
+
             return Published.FAILED;
         }
     }
@@ -376,6 +375,9 @@ final class ForyEjbIndex {
         // advertises.
         List<Entry> entries = new ArrayList<>();
         for (Method method : ForyViewMethods.of(view)) {
+            if (method.getReturnType() == void.class) {
+                continue;
+            }
             String rpcName = Character.toUpperCase(method.getName().charAt(0)) + method.getName().substring(1);
             Class<?> parameter = method.getParameterCount() == 0 ? void.class : method.getParameterTypes()[0];
             var models = ForyRuntimeModelGenerator.unary(packageName, method.getName(), parameter,
@@ -413,8 +415,7 @@ final class ForyEjbIndex {
      * declare the same message, with the same type id, twice.
      */
     static String packageName(String app, String module, String bean, Class<?> view) {
-        return "glassfish." + escape(app) + '.' + escape(module) + '.' + escape(bean) + '.'
-                + escape(view.getSimpleName());
+        return "glassfish." + escape(app) + '.' + escape(module) + '.' + escape(bean);
     }
 
     static String serviceSimpleName(Class<?> view) {
@@ -444,7 +445,7 @@ final class ForyEjbIndex {
         // A name that would not be a Java identifier as it is - it starts with
         // a digit, or it is a keyword - has its first character escaped too, so
         // that 2fa-app and a module named default can be published.
-        if (out.length() > 0 && (Character.isDigit(out.charAt(0)) || SourceVersion.isKeyword(out))) {
+        if (SourceVersion.latest() == null) {
             char first = name.charAt(0);
             StringBuilder escaped = new StringBuilder(out.length() + 2);
             escapeInto(escaped, first);

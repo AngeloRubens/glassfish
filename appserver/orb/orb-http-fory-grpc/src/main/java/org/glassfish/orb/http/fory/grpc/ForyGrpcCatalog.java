@@ -82,7 +82,6 @@ public final class ForyGrpcCatalog {
     public void dispatch(ServerExchange exchange) throws IOException {
         if (!"GET".equals(exchange.method()) && !"HEAD".equals(exchange.method())) {
             exchange.setStatus(405);
-            exchange.setResponseHeader("Allow", "GET, HEAD");
             return;
         }
         String path = new String(exchange.pathBytes(), exchange.pathOffset(),

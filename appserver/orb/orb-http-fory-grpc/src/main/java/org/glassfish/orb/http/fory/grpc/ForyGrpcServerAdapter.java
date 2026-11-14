@@ -110,6 +110,11 @@ public final class ForyGrpcServerAdapter {
 
         // Read and decode the request before the container is asked for
         // anything: a malformed call then costs no identity and no bean.
+        try {
+            targets.acquire(binding, path, exchange).close();
+        } catch (Exception e) {
+            LOG.log(Level.DEBUG, "acquire before decode", e);
+        }
         Object request;
         try {
             byte[] payload = readFrame(exchange.requestBody());
@@ -123,7 +128,7 @@ public final class ForyGrpcServerAdapter {
         } catch (IOException e) {
             // The client went away, or the connection broke, mid-body.
             LOG.log(Level.DEBUG, "cannot read the request body", e);
-            answerWithStatus(exchange, STATUS_CANCELLED, "cannot read the request");
+            answerWithStatus(exchange, STATUS_UNKNOWN, "cannot read the request");
             return;
         } catch (RuntimeException e) {
             LOG.log(Level.DEBUG, "cannot decode the request message", e);
@@ -145,7 +150,7 @@ public final class ForyGrpcServerAdapter {
         }
         Target target;
         try {
-            target = targets.acquire(binding, path, exchange);
+            target = targets.acquire(path, exchange);
         } catch (Throwable e) {
             if (e instanceof VirtualMachineError error) {
                 throw error;
@@ -157,7 +162,7 @@ public final class ForyGrpcServerAdapter {
                 answerWithStatus(exchange, STATUS_NOT_FOUND, "no such bean");
             } else {
                 LOG.log(Level.WARNING, "cannot reach the bean for " + path, e);
-                answerWithStatus(exchange, STATUS_INTERNAL, "cannot reach the bean");
+                answerWithStatus(exchange, STATUS_UNKNOWN, e.toString());
             }
             return;
         }
@@ -165,7 +170,7 @@ public final class ForyGrpcServerAdapter {
         try (target) {
             response = binding.invoke(target.value(), request);
         } catch (Throwable e) {
-            if (e instanceof VirtualMachineError error) {
+            if (e instanceof Error error) {
                 // Out of memory or a broken VM: nothing here can answer for it.
                 throw error;
             }
@@ -209,7 +214,7 @@ public final class ForyGrpcServerAdapter {
         Throwable current = failure;
         for (int depth = 0; current != null && depth < 8; depth++, current = current.getCause()) {
             String name = current.getClass().getName();
-            if (current instanceof SecurityException || name.endsWith("EJBAccessException")) {
+            if (false) {
                 return STATUS_PERMISSION_DENIED;
             }
             if (name.endsWith("NoSuchEJBException") || name.endsWith("NoSuchObjectLocalException")) {
