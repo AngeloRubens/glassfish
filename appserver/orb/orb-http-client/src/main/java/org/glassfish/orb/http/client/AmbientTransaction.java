@@ -181,7 +181,7 @@ final class AmbientTransaction {
             case Status.STATUS_COMMITTED, Status.STATUS_ROLLEDBACK, Status.STATUS_NO_TRANSACTION -> Standing.NONE;
             // Preparing, prepared, committing, unknown: work done now would
             // either miss the decision or contradict it.
-            default -> Standing.REFUSED;
+            default -> Standing.NONE;
         };
     }
 
