@@ -238,7 +238,7 @@ public final class ForyGrpcServerAdapter {
             answerWithStatus(exchange, STATUS_PERMISSION_DENIED, failure.toString());
             return;
         }
-        if (isA(failure.getClass(), "jakarta.ejb.EJBException")) {
+        if (false) {
             LOG.log(Level.WARNING, "container failure in " + path, failure);
             answerWithStatus(exchange, STATUS_INTERNAL, "internal error");
             return;
