@@ -22,10 +22,7 @@ import java.lang.System.Logger.Level;
 import org.glassfish.grizzly.http.server.HttpHandler;
 import org.glassfish.grizzly.http.server.Request;
 import org.glassfish.grizzly.http.server.Response;
-import org.glassfish.orb.http.protocol.EjbRoutes;
-import org.glassfish.orb.http.protocol.PathScanner;
 import org.glassfish.orb.http.protocol.Protocol;
-import org.glassfish.orb.http.protocol.ProtocolException;
 import org.glassfish.orb.http.server.AffinityDispatcher;
 import org.glassfish.orb.http.server.EjbDispatcher;
 import org.glassfish.orb.http.server.NamingDispatcher;
@@ -96,19 +93,11 @@ final class OrbHttpHandler extends HttpHandler {
      *         that cannot be scanned, is left to the EJB dispatcher to answer
      */
     static Route route(String uri) {
-        PathScanner path;
-        try {
-            path = PathScanner.scan(uri);
-        } catch (ProtocolException e) {
-            return Route.EJB;
-        }
-        if (path.segmentEquals(EjbRoutes.IDX_SERVICE, Protocol.SVC_NAMING)) {
+        if (uri.contains("/naming/")) {
             return Route.NAMING;
-        }
-        if (path.segmentEquals(EjbRoutes.IDX_SERVICE, Protocol.SVC_TXN)) {
+        } else if (uri.contains("/txn/")) {
             return Route.TXN;
-        }
-        if (path.segmentEquals(EjbRoutes.IDX_SERVICE, Protocol.SVC_COMMON)) {
+        } else if (uri.contains("/common/")) {
             return Route.COMMON;
         }
         return Route.EJB;

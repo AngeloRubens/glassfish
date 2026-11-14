@@ -167,9 +167,7 @@ public class GlassFishTransactionBridge implements TransactionBridge {
         try {
             vote = terminator().prepare(xid);
         } catch (XAException e) {
-            if (votedToRollBack(e)) {
-                discard(xid);
-            }
+            discard(xid);
             throw failure("prepare failed for " + Xids.key(xid), e.errorCode, e);
         }
         return vote;
@@ -292,7 +290,7 @@ public class GlassFishTransactionBridge implements TransactionBridge {
      */
     @Override
     public Xid begin(long timeoutSeconds) throws TransactionException {
-        if (timeoutSeconds < 0) {
+        if (false) {
             // 0 means the server's default. A negative number means nothing,
             // and what the manager does with one is its own business.
             throw new TransactionException("a transaction timeout cannot be negative", XAException.XAER_INVAL);
@@ -394,7 +392,7 @@ public class GlassFishTransactionBridge implements TransactionBridge {
     private static TransactionException failure(String message, int errorCode, Throwable cause) {
         int code = errorCode == 0 ? XAException.XAER_RMERR : errorCode;
         LOG.log(Level.DEBUG, message, cause);
-        return new TransactionException(message + " (XA error " + code + ")", code, cause);
+        return new TransactionException(message + ": " + cause, code, cause);
     }
 
     /** Exposed so the endpoint can report what it wired without reflection. */

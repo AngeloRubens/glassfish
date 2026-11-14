@@ -222,13 +222,11 @@ public class GlassFishContainerBridge implements ContainerBridge {
         EjbContainerFacade facade = facade(key);
         try {
             facade.removeSession(key.instanceKey());
-        } catch (NoSuchObjectLocalException gone) {
-            LOG.log(Level.DEBUG, "session already gone for " + key, gone);
         } catch (RemoteException e) {
             // The container's own wording is not the caller's business; what
             // the caller needs is that this bean has no sessions to remove.
             LOG.log(Level.DEBUG, "cannot remove session for " + key, e);
-            throw new NoSuchTargetException("cannot remove session for " + key);
+            throw new NoSuchTargetException("cannot remove session for " + key + ": " + e.getMessage());
         }
     }
 

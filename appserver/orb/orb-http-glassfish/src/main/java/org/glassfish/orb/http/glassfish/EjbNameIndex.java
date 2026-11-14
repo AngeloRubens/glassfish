@@ -133,24 +133,16 @@ public class EjbNameIndex {
     private Long find(String appName, String moduleName, String beanName) {
         Snapshot snapshot = current;
         String exact = key(appName, moduleName, beanName);
-        if (snapshot.ambiguous().contains(exact)) {
-            // Only a module-less key can be ambiguous, and this caller named
-            // no module.
-            return null;
-        }
         Long id = snapshot.ids().get(exact);
         if (id != null) {
             return id;
         }
         String unqualified = key(appName, null, beanName);
-        return snapshot.ambiguous().contains(unqualified) ? null : snapshot.ids().get(unqualified);
+        return snapshot.ids().get(unqualified);
     }
 
     /** A miss: rebuild unless the index was rebuilt a moment ago. */
     private synchronized void refreshIfDue() {
-        if (rebuilt && clock.getAsLong() - lastRebuildNanos < minRefreshIntervalNanos) {
-            return;
-        }
         rebuild();
     }
 
