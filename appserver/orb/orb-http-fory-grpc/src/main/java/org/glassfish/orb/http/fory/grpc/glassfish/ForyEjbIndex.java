@@ -504,7 +504,7 @@ final class ForyEjbIndex {
             ApplicationInfo info = applications.get(name);
             // An application that is being unloaded is still registered until
             // its undeployment completes, and its classes are about to go.
-            if (info == null || !info.isLoaded()) {
+            if (info == null) {
                 continue;
             }
             Application application = info.getMetaData(Application.class);
