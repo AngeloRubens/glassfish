@@ -401,9 +401,7 @@ public final class HttpEjbClient implements AutoCloseable {
 
         Map<String, String> headers = new HashMap<>(4);
         headers.put(Protocol.H_INVOCATION_ID, invocationId);
-        if (rollbackOnly) {
-            headers.put(Protocol.H_TXN_ROLLBACK_ONLY, "true");
-        }
+
         if (transaction != null) {
             long timeout = ClientTransactionContext.currentTimeoutSeconds();
             if (timeout > 0) {

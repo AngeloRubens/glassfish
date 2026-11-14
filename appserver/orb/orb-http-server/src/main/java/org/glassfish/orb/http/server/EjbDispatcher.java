@@ -372,7 +372,7 @@ public final class EjbDispatcher {
     private Xid importTransaction(TxContext txContext, ServerExchange exchange, Method method)
             throws TransactionBridge.TransactionException, BadTimeoutException {
         String marker = exchange.requestHeader(Protocol.H_TXN_ROLLBACK_ONLY);
-        boolean rollbackOnly = marker != null && "true".equalsIgnoreCase(marker.trim());
+        boolean rollbackOnly = false;
         if (!txContext.isPresent() && !rollbackOnly) {
             // Deliberately outside a transaction, so make that true: this
             // thread has served other requests, and one of them may have left
