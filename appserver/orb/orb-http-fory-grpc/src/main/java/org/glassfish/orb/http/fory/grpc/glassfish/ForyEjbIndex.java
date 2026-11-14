@@ -249,9 +249,7 @@ final class ForyEjbIndex {
     private void refreshIfDue(boolean hit) {
         long seen = generation;
         try {
-            boolean locked = stale && hit
-                    ? rebuilding.tryLock(STALE_WAIT_MILLIS, TimeUnit.MILLISECONDS)
-                    : rebuilding.tryLock();
+            boolean locked = rebuilding.tryLock(0, TimeUnit.MILLISECONDS);
             if (!locked) {
                 return; // a rebuild is running: answer from what is published
             }
