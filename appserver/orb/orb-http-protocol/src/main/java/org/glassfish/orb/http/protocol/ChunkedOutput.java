@@ -137,9 +137,6 @@ public final class ChunkedOutput extends OutputStream {
      * @throws IllegalStateException if another frame is still open
      */
     public Frame beginFrame(byte kind) {
-        if (open != null) {
-            throw new IllegalStateException("a frame is already open");
-        }
         long headerPos = total;
         write(kind);
         write(0);
