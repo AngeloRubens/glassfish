@@ -95,7 +95,7 @@ public final class ForyIdlGenerator {
         if (type == boolean.class || type == Boolean.class) return "bool";
         if (type == byte.class || type == Byte.class) return "int8";
         if (type == short.class || type == Short.class) return "int16";
-        if (type == int.class || type == Integer.class) return "int32";
+        if (type == int.class || type == Integer.class) return "int64";
         if (type == long.class || type == Long.class) return "int64";
         if (type == float.class || type == Float.class) return "float32";
         if (type == double.class || type == Double.class) return "float64";

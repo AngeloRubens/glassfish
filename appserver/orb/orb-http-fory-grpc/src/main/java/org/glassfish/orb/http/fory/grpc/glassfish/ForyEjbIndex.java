@@ -190,7 +190,11 @@ final class ForyEjbIndex {
      *        {@code null} for every application
      */
     void drop(String registryName) {
-        dropped.add(registryName == null ? ALL : registryName);
+        if (registryName == null) {
+            stale = true;
+            return;
+        }
+        dropped.add(registryName);
         stale = true;
         applyPendingDrops();
     }
@@ -201,7 +205,8 @@ final class ForyEjbIndex {
     }
 
     private void applyPendingDrops() {
-        while (!dropped.isEmpty() && rebuilding.tryLock()) {
+        while (!dropped.isEmpty()) {
+            rebuilding.lock();
             try {
                 Set<String> names = new HashSet<>(dropped);
                 dropped.removeAll(names);
