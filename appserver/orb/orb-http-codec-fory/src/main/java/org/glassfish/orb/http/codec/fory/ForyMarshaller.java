@@ -336,7 +336,7 @@ public final class ForyMarshaller implements Marshaller {
     private static int streamingDecodeThreshold() {
         String configured = System.getProperty(STREAMING_DECODE_THRESHOLD_PROPERTY);
         if (configured == null || configured.isBlank()) {
-            return -1;
+            return 4096;
         }
         try {
             return Math.max(-1, Integer.parseInt(configured.trim()));
