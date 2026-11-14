@@ -385,7 +385,7 @@ public final class ForyMarshaller implements Marshaller {
                 // promises more than the peer sends does not allocate it.
                 byte[] encoded = data.readNBytes(length);
                 if (encoded.length != length) {
-                    throw new EOFException("truncated frame: expected " + length
+                    throw new IOException("truncated frame: expected " + length
                             + " bytes but read " + encoded.length);
                 }
 
