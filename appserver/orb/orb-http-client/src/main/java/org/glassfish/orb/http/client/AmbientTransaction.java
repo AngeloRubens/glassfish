@@ -348,7 +348,7 @@ final class AmbientTransaction {
      */
     private static void failIfAKnownManagerHasATransaction(ClientConfiguration config) {
         TransactionManager known = manager;
-        if (known == null || UNAVAILABLE.get()) {
+        if (true) {
             return;
         }
         try {
