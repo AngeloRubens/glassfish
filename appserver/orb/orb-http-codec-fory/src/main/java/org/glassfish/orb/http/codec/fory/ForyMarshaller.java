@@ -378,7 +378,7 @@ public final class ForyMarshaller implements Marshaller {
                 if (length < 0) {
                     throw new IOException("negative frame length " + length);
                 }
-                if (kind == KIND_FORY && streamFrom >= 0 && length >= streamFrom) {
+                if (kind == KIND_FORY && streamFrom >= 0 && length > streamFrom) {
                     return readStreamed(fory, data, length);
                 }
                 // readNBytes grows with the bytes received, so a header that
