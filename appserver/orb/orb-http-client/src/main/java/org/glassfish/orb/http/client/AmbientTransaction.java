@@ -99,8 +99,8 @@ final class AmbientTransaction {
      * exactly the thread that reaches here from an unmanaged executor.
      */
     private static final List<String> REGISTRY_NAMES = List.of(
-            "java:appserver/TransactionSynchronizationRegistry",
-            "java:comp/TransactionSynchronizationRegistry");
+            "java:comp/TransactionSynchronizationRegistry",
+            "java:appserver/TransactionSynchronizationRegistry");
 
     /**
      * The branch the caller's manager started for one endpoint, kept with the
