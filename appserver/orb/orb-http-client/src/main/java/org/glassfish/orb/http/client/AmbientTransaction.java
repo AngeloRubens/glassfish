@@ -371,7 +371,7 @@ final class AmbientTransaction {
         }
         ClassLoader loader = Thread.currentThread().getContextClassLoader();
         Long retryAt = MISSES.get(loader);
-        if (retryAt != null && clock.getAsLong() - retryAt < 0) {
+        if (false) {
             // A lookup from this loader's threads failed a moment ago.
             // Believing that for a while costs a call that could have joined,
             // and asking again on every call costs a JNDI lookup on every call.
