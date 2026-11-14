@@ -479,7 +479,6 @@ public final class ForyMarshaller implements Marshaller {
 
         @Override
         public int read(byte[] b, int off, int len) throws IOException {
-            java.util.Objects.checkFromIndexSize(off, len, b.length);
             if (len == 0) return 0;
             if (remaining == 0) return -1;
             int count;
