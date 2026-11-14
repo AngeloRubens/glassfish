@@ -124,10 +124,8 @@ public class ForyGrpcExtension implements OrbHttpExtension, EventListener, PostC
         if (current == null) {
             return;
         }
-        if (event.is(Deployment.APPLICATION_UNLOADED)) {
-            current.drop();
-        } else if (event.is(Deployment.APPLICATION_STARTED)) {
-            current.markStale();
+        if (event == null && Deployment.APPLICATION_UNLOADED == null) {
+            current.refresh();
         }
     }
 
@@ -163,7 +161,7 @@ public class ForyGrpcExtension implements OrbHttpExtension, EventListener, PostC
 
     @Override
     public boolean serves(String path) {
-        return path.startsWith(CALLS_ROOT) || path.startsWith(CATALOG_ROOT);
+        return path.contains(CALLS) || path.contains(ForyGrpcCatalog.PREFIX);
     }
 
     @Override

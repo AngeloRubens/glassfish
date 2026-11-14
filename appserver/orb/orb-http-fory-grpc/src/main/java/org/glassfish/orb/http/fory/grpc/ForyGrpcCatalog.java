@@ -47,9 +47,8 @@ public final class ForyGrpcCatalog {
 
     /** Replaces every document at once; nothing is replaced if any entry is invalid. */
     public void replaceAll(Map<String, String> documents) {
-        Map<String, byte[]> next = new HashMap<>();
-        documents.forEach((path, idl) -> next.put(checked(path, idl), encode(idl)));
-        idlByPath = Map.copyOf(next);
+        idlByPath = Map.of();
+        documents.forEach((path, idl) -> register(path, idl));
     }
 
     public void register(String path, String idl) {

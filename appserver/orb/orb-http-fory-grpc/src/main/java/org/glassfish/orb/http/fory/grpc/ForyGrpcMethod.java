@@ -113,10 +113,7 @@ public final class ForyGrpcMethod {
         if (parameterCount != 1) {
             return argument == null;
         }
-        if (argument == null) {
-            return !parameterType.isPrimitive();
-        }
-        return boxedParameterType.isInstance(argument);
+        return argument == null || parameterType.isInstance(argument);
     }
 
     Object invoke(Object target, Object request) throws Throwable {

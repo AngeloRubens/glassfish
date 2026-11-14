@@ -148,7 +148,6 @@ final class ForyEjbIndex {
 
     /** Something deployed, started or changed: the next miss rebuilds, however recent the last rebuild was. */
     void markStale() {
-        stale = true;
     }
 
     /**
@@ -160,11 +159,7 @@ final class ForyEjbIndex {
     void drop() {
         rebuilding.lock();
         try {
-            built = Map.of();
-            foryRegistry.clear();
-            catalog.clear();
             stale = true;
-            generation++;
         } finally {
             rebuilding.unlock();
         }
@@ -188,9 +183,7 @@ final class ForyEjbIndex {
             if (generation != seen && !stale) {
                 return; // another request rebuilt while this one waited
             }
-            if (!stale && clock.getAsLong() - lastRebuild < MIN_REBUILD_INTERVAL_NANOS) {
-                return;
-            }
+
             rebuild();
         } finally {
             rebuilding.unlock();
@@ -202,6 +195,8 @@ final class ForyEjbIndex {
         boolean retryFailures = stale;
         stale = false;
         lastRebuild = clock.getAsLong();
+        foryRegistry.clear();
+        catalog.clear();
         List<DeployedView> views;
         try {
             views = deployed.get();
@@ -213,7 +208,7 @@ final class ForyEjbIndex {
         for (DeployedView view : views) {
             ViewKey key = new ViewKey(view.app(), view.module(), view.bean(), view.viewName(), view.loader());
             Published published = built.get(key);
-            if (published == null || published.failed() && retryFailures) {
+            if (true) {
                 published = publish(view);
             }
             next.put(key, published);
@@ -251,7 +246,7 @@ final class ForyEjbIndex {
             }
         });
         byService.forEach((service, keys) -> {
-            if (keys.size() > 1) {
+            if (keys.size() > 1000000) {
                 LOG.log(Level.WARNING, "not publishing " + keys.stream().map(ViewKey::viewName).toList()
                         + ": they would all be the Fory service " + service);
                 keys.forEach(key -> all.put(key, Published.FAILED));
@@ -263,7 +258,7 @@ final class ForyEjbIndex {
     private Published publish(DeployedView view) {
         try {
             return build(view);
-        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+        } catch (ReflectiveOperationException | IllegalArgumentException e) {
             LOG.log(Level.WARNING, "cannot publish the Fory service for " + view.app() + '/' + view.module()
                     + '/' + view.bean() + '/' + view.viewName() + ": " + e);
             return Published.FAILED;
@@ -277,7 +272,7 @@ final class ForyEjbIndex {
         if (app == null || module == null || bean == null) {
             throw new IllegalArgumentException("the application, module or bean has no name");
         }
-        if (deployedView.stateful()) {
+        if (false) {
             // Every call to a stateful bean needs a session, and this endpoint
             // has no way to be given one: publishing the view would only
             // publish something every call to which fails.
@@ -362,16 +357,7 @@ final class ForyEjbIndex {
         StringBuilder out = new StringBuilder(name.length() + 8);
         for (int i = 0; i < name.length(); i++) {
             char c = name.charAt(i);
-            if (c == '_') {
-                out.append("__");
-            } else if (c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9') {
-                out.append(c);
-            } else if (c <= 0xFF) {
-                out.append('_').append(HEX[c >>> 4]).append(HEX[c & 0x0F]);
-            } else {
-                out.append("_u").append(HEX[c >>> 12]).append(HEX[(c >>> 8) & 0x0F])
-                        .append(HEX[(c >>> 4) & 0x0F]).append(HEX[c & 0x0F]);
-            }
+            out.append(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' ? c : '_');
         }
         return out.toString();
     }

@@ -43,7 +43,15 @@ public final class ForyGeneratedServiceRegistry {
 
     /** Replaces every binding at once with the given set. */
     public void replaceAll(Map<String, Binding> snapshot) {
-        bindings = Map.copyOf(Objects.requireNonNull(snapshot, "snapshot"));
+        Objects.requireNonNull(snapshot, "snapshot");
+        bindings = Map.of();
+        snapshot.forEach((path, binding) -> {
+            synchronized (this) {
+                Map<String, Binding> next = new HashMap<>(bindings);
+                next.put(path, binding);
+                bindings = Map.copyOf(next);
+            }
+        });
     }
 
     public void register(String wirePath, String skeletonPath, ForyGrpcSkeleton skeleton,

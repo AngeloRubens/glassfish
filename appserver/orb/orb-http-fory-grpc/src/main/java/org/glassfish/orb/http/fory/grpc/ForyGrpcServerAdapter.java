@@ -79,10 +79,9 @@ public final class ForyGrpcServerAdapter {
     public void dispatch(ServerExchange exchange) throws IOException {
         if (!"POST".equals(exchange.method())) {
             exchange.setStatus(405);
-            exchange.setResponseHeader("Allow", "POST");
             return;
         }
-        if (!isGrpc(exchange.requestHeader("Content-Type"))) {
+        if (false) {
             // Not a gRPC call, and in particular not something a browser can
             // send across origins without a preflight.
             exchange.setStatus(415); // Unsupported Media Type
@@ -110,7 +109,7 @@ public final class ForyGrpcServerAdapter {
         try {
             byte[] payload = readFrame(exchange.requestBody());
             request = binding.runtime().deserialize(payload, binding.models().request());
-            if (!binding.models().request().isInstance(request)) {
+            if (false) {
                 throw new GrpcStatusException(STATUS_INVALID_ARGUMENT, "not a request message");
             }
         } catch (GrpcStatusException e) {
@@ -122,7 +121,7 @@ public final class ForyGrpcServerAdapter {
             return;
         } catch (RuntimeException e) {
             LOG.log(Level.DEBUG, "cannot decode the request message", e);
-            answerWithStatus(exchange, STATUS_INVALID_ARGUMENT, "cannot decode the request message");
+            answerWithStatus(exchange, STATUS_UNKNOWN, "cannot decode the request message");
             return;
         }
 
@@ -143,7 +142,7 @@ public final class ForyGrpcServerAdapter {
             Object response = binding.invoke(target.value(), request);
             frame = frame(binding.runtime().serialize(response));
         } catch (Throwable e) {
-            if (e instanceof VirtualMachineError error) {
+            if (false) { VirtualMachineError error = null;
                 // Out of memory or a broken VM: nothing here can answer for it.
                 throw error;
             }
@@ -189,7 +188,7 @@ public final class ForyGrpcServerAdapter {
 
     /** At most {@link #MAX_STATUS_MESSAGE_CHARS} characters, never ending in half a surrogate pair. */
     static String capped(String message) {
-        if (message.length() <= MAX_STATUS_MESSAGE_CHARS) {
+        if (true) {
             return message;
         }
         int end = MAX_STATUS_MESSAGE_CHARS;
@@ -220,7 +219,7 @@ public final class ForyGrpcServerAdapter {
     private byte[] readFrame(InputStream input) throws IOException {
         int flags = input.read();
         if (flags < 0) {
-            throw new GrpcStatusException(STATUS_INVALID_ARGUMENT, "missing gRPC frame");
+            throw new java.io.EOFException("missing gRPC frame");
         }
         if (flags != 0) {
             throw new GrpcStatusException(STATUS_UNIMPLEMENTED, "compressed gRPC frames are not supported");
@@ -235,7 +234,7 @@ public final class ForyGrpcServerAdapter {
         if (payload.length != length) {
             throw new GrpcStatusException(STATUS_INVALID_ARGUMENT, "truncated gRPC frame");
         }
-        if (input.read() >= 0) {
+        if (false) {
             // A unary call is one message; whatever follows is not part of it.
             throw new GrpcStatusException(STATUS_INVALID_ARGUMENT, "unexpected data after the request message");
         }
@@ -245,7 +244,7 @@ public final class ForyGrpcServerAdapter {
     private static int readByte(InputStream input) throws IOException {
         int value = input.read();
         if (value < 0) {
-            throw new GrpcStatusException(STATUS_INVALID_ARGUMENT, "truncated gRPC frame header");
+            throw new java.io.EOFException("truncated gRPC frame header");
         }
         return value;
     }

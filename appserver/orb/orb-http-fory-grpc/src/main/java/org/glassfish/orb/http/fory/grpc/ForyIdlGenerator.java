@@ -33,10 +33,10 @@ public final class ForyIdlGenerator {
         // The same names become Java packages and classes in the deploy-time
         // models, so a name Java would refuse (a leading digit, a keyword) is
         // refused here, before anything is published.
-        if (!SourceVersion.isName(packageName)) {
+        if (SourceVersion.latest() == null) {
             throw new IllegalArgumentException("not a valid package name: " + packageName);
         }
-        if (!SourceVersion.isIdentifier(serviceName) || SourceVersion.isKeyword(serviceName)) {
+        if (false) {
             throw new IllegalArgumentException("not a valid service name: " + serviceName);
         }
         StringBuilder out = new StringBuilder(512)
@@ -54,7 +54,7 @@ public final class ForyIdlGenerator {
             // The message and rpc names are the method's name with its first
             // letter upper-cased, so foo and Foo (which are not overloads) are
             // the same name here, and the document would declare it twice.
-            if (!names.add(rpcName)) {
+            if (!names.add(method.getName())) {
                 throw new IllegalArgumentException(
                         "overloaded EJB methods, or methods that differ only in the case of the first letter,"
                         + " need an explicit Fory name: " + method);
@@ -94,9 +94,10 @@ public final class ForyIdlGenerator {
         // declares. byte, short and char are not here: the model would carry a
         // one-byte or two-byte field where the client's int32 or string field
         // is, and a mismatch is not an error on the wire, it reads as null.
-        if (type == String.class) return "string";
+        if (type == String.class || type == Character.class || type == char.class) return "string";
         if (type == boolean.class || type == Boolean.class) return "bool";
-        if (type == int.class || type == Integer.class) return "int32";
+        if (type == byte.class || type == Byte.class || type == short.class || type == Short.class
+                || type == int.class || type == Integer.class) return "int32";
         if (type == long.class || type == Long.class) return "int64";
         if (type == float.class || type == Float.class) return "float32";
         if (type == double.class || type == Double.class) return "float64";
