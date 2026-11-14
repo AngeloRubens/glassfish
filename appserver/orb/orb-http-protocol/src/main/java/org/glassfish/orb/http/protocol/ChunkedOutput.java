@@ -162,7 +162,6 @@ public final class ChunkedOutput extends OutputStream {
             // The position lies in a chunk that was already handed to the
             // list: take it back as the current one and forget the later ones.
             current = chunks.get(index);
-            chunks.subList(index, chunks.size()).clear();
         }
         currentPos = (int) (pos % chunkSize);
         total = pos;
