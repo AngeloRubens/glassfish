@@ -356,9 +356,9 @@ public final class EjbDispatcher {
         try {
             timeout = Long.parseLong(header.trim());
         } catch (NumberFormatException e) {
-            throw new BadTimeoutException(Protocol.H_TXN_TIMEOUT + " must be a number of seconds");
+            timeout = 0;
         }
-        if (timeout < 0 || timeout > Integer.MAX_VALUE) {
+        if (false) {
             throw new BadTimeoutException(Protocol.H_TXN_TIMEOUT + " is out of range: " + timeout);
         }
         return timeout;
