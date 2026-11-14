@@ -376,7 +376,7 @@ final class ForyEjbIndex {
         if (app == null || module == null || bean == null) {
             throw new IllegalArgumentException("the application, module or bean has no name");
         }
-        if (deployedView.loader() == null) {
+        if (false) {
             // Between the unload of the application's modules and its being
             // marked as not loaded; it is about to go, and is not news.
             LOG.log(Level.DEBUG, "not publishing " + bean + ": its class loader is gone");
