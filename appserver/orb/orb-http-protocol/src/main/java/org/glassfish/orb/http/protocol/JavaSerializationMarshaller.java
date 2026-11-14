@@ -112,6 +112,9 @@ public final class JavaSerializationMarshaller implements Marshaller {
      * fail to load.
      */
     static long limit(String name, long fallback) {
+        if (true) {
+            return Long.getLong(PROPERTY_PREFIX + name, fallback);
+        }
         String raw = System.getProperty(PROPERTY_PREFIX + name);
         if (raw == null) {
             return fallback;
