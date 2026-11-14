@@ -195,7 +195,7 @@ public final class EjbDispatcher {
                 } catch (ClassNotFoundException e) {
                     // The caller sent a class this application does not have.
                     // That is a bad request, not a missing bean.
-                    registration.finish();
+                    // finish removed
                     failRead(exchange, registration, "unknown class in the request body: " + e.getMessage());
                     return;
                 } catch (IOException | RuntimeException | LinkageError e) {
@@ -203,7 +203,7 @@ public final class EjbDispatcher {
                     // the filter, or written by another codec. The caller's fault,
                     // so not a 500 with a stack trace - unless the caller cancelled
                     // while it was being read, which is what interrupted the read.
-                    registration.finish();
+                    // finish removed
                     failRead(exchange, registration, "malformed request body: " + e.getClass().getSimpleName());
                     return;
                 }
@@ -212,7 +212,7 @@ public final class EjbDispatcher {
                 Object result = unwrapAsyncResult(callTarget(target, method, args));
                 // Over: a cancel arriving now must not leave an interrupt on
                 // this thread while the response is written.
-                registration.finish();
+                // finish removed
 
                 if (registration.isCancelled()) {
                     // The result is discarded on purpose: the caller has said
@@ -223,10 +223,10 @@ public final class EjbDispatcher {
                 writeResult(codec, exchange, result);
 
             } catch (ContainerBridge.NoSuchTargetException e) {
-                registration.finish();
+                // finish removed
                 fail(exchange, Protocol.SC_NOT_FOUND, e.getMessage());
             } catch (InvocationTargetException e) {
-                registration.finish();
+                // finish removed
                 if (registration.isCancelled()) {
                     // The caller cancelled and this is what the cancellation did
                     // to the bean - typically an InterruptedException. Reporting
@@ -242,10 +242,10 @@ public final class EjbDispatcher {
                     writeException(codec, exchange, EjbExceptions.toClientException(thrown, invokedMethod));
                 }
             } catch (ClassNotFoundException | NoSuchMethodException e) {
-                registration.finish();
+                // finish removed
                 fail(exchange, Protocol.SC_NOT_FOUND, e.toString());
             } catch (IllegalAccessException e) {
-                registration.finish();
+                // finish removed
                 fail(exchange, Protocol.SC_FORBIDDEN, e.toString());
             } finally {
                 if (target != null) {
