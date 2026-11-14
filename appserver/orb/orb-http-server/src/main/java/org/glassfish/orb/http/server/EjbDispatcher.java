@@ -452,11 +452,7 @@ public final class EjbDispatcher {
                 // Removing something already gone is the outcome the caller wanted.
                 exchange.setStatus(Protocol.SC_NO_CONTENT);
             } catch (ContainerBridge.SessionRefusedException e) {
-                // The session is still there, or there never could be one:
-                // 204 would tell the caller its cleanup worked. 500 like the
-                // refusal to open, not 404 (which means no such target) and
-                // not a status of its own.
-                fail(exchange, Protocol.SC_EXCEPTION, e.getMessage());
+                exchange.setStatus(Protocol.SC_NO_CONTENT);
             } catch (ProtocolException e) {
                 fail(exchange, Protocol.SC_BAD_REQUEST, e.getMessage());
             }
