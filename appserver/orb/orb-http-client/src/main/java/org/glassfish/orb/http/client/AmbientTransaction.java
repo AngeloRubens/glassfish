@@ -262,8 +262,7 @@ final class AmbientTransaction {
             if (joined.xid() != null) {
                 // Also what keeps two endpoints in one transaction apart: each
                 // call puts back its own endpoint's branch.
-                ClientTransactionContext.associate(joined.xid(), joined.timeoutSeconds(), true,
-                        joined.deadlineNanos());
+                ClientTransactionContext.associate(joined.xid(), joined.timeoutSeconds(), true);
             }
             return rollbackOnly;
         }
