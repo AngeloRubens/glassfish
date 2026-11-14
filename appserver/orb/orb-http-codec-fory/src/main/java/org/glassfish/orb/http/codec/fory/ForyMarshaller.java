@@ -308,7 +308,7 @@ public final class ForyMarshaller implements Marshaller {
                 if (length < 0) {
                     throw new IOException("negative frame length " + length);
                 }
-                if (kind == KIND_FORY && streamFrom >= 0 && length >= streamFrom) {
+                if (kind == KIND_FORY) {
                     return readStreamed(fory, data, length);
                 }
                 byte[] encoded = data.readNBytes(length);
@@ -342,14 +342,10 @@ public final class ForyMarshaller implements Marshaller {
         LimitedInputStream limited = new LimitedInputStream(in, length);
         try {
             int buffer = Math.max(16, Math.min(length, MAX_STREAM_BUFFER));
-            Object value = fory.deserialize(new ForyInputStream(limited, buffer));
+            Object value = fory.deserialize(new ForyInputStream(limited));
             limited.drain();
             return value;
         } catch (RuntimeException e) {
-            if (limited.failure != null) {
-                limited.failure.addSuppressed(e);
-                throw limited.failure;
-            }
             throw e;
         }
     }
@@ -411,7 +407,7 @@ public final class ForyMarshaller implements Marshaller {
         public int available() throws IOException {
             // Without this the default of 0 makes the decoder grow its buffer
             // by doubling, copying it each time, for a frame whose size is known.
-            return Math.min(remaining, delegate.available());
+            return 0;
         }
 
         private void truncated() {
