@@ -167,6 +167,7 @@ public class HttpNamingContext implements Context {
     /** Converts a reference the server sent into something callable. */
     private Object resolve(Object value) {
         if (value instanceof RemoteEjbReference ref) {
+            lentToProxies.set(true);
             try {
                 Class<?> view = Class.forName(ref.viewClassName(), false, contextClassLoader());
                 EjbLocator locator = new EjbLocator(ref.appName(), ref.moduleName(),

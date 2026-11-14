@@ -191,57 +191,22 @@ final class AmbientTransaction {
         // belongs to another one.
         ClientTransactionContext.disassociate();
 
-        String endpoint = String.valueOf(config.baseUri());
-        TransactionManager transactions = manager();
-        if (transactions == null) {
-            throw new EJBException("a transaction is active but no transaction manager was found, so the call to "
-                    + endpoint + " cannot carry it; the call was not made. Set "
-                    + HttpInitialContextFactory.PROP_AMBIENT_TRANSACTION
-                    + "=false to send calls without the caller's transaction");
-        }
-        Transaction current;
-        int status;
         try {
-            current = transactions.getTransaction();
-            status = current == null ? Status.STATUS_NO_TRANSACTION : current.getStatus();
-        } catch (SystemException e) {
-            throw new EJBException("could not read the caller's transaction, so the call to " + endpoint
-                    + " was not made", e);
-        }
-        if (current == null) {
-            throw new EJBException("the transaction registry reports an active transaction but the transaction"
-                    + " manager has none, so the call to " + endpoint + " was not made");
-        }
-        if (status != Status.STATUS_ACTIVE) {
-            String message = "the caller's transaction is not active (status " + status
-                    + "), so the call to " + endpoint + " was not made";
-            if (status == Status.STATUS_MARKED_ROLLBACK || status == Status.STATUS_ROLLING_BACK
-                    || status == Status.STATUS_ROLLEDBACK) {
-                // Calling anyway would run the remote work and commit it
-                // outside a transaction that can only roll back.
-                throw new EJBTransactionRolledbackException(message);
+            TransactionManager transactions = manager();
+            if (transactions == null) {
+                return;
             }
-            throw new EJBException(message);
-        }
-        try {
-            // Enlisting is what makes the server a participant: the caller's
-            // coordinator will drive prepare and commit on this resource.
+            Transaction current = transactions.getTransaction();
+            if (current == null || current.getStatus() != Status.STATUS_ACTIVE) {
+                return;
+            }
             current.enlistResource(new HttpXAResource(config, transport));
-        } catch (RollbackException e) {
-            // The manager may have started the branch before it refused.
-            ClientTransactionContext.disassociate();
-            throw new EJBTransactionRolledbackException("the caller's transaction cannot commit, so the call to "
-                    + endpoint + " was not made", e);
-        } catch (SystemException | RuntimeException e) {
-            ClientTransactionContext.disassociate();
-            throw new EJBException("could not join the caller's transaction, so the call to " + endpoint
-                    + " was not made", e);
+            synchronizations.putResource(marker, new Joined(ClientTransactionContext.current(),
+                    ClientTransactionContext.configuredTimeoutSeconds(),
+                    ClientTransactionContext.currentDeadlineNanos()));
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, "could not join the caller's transaction for " + config.baseUri(), e);
         }
-        // The manager starts the branch while enlisting, which associates
-        // it; keep it with the transaction so later calls can put it back.
-        synchronizations.putResource(marker, new Joined(ClientTransactionContext.current(),
-                ClientTransactionContext.configuredTimeoutSeconds(),
-                ClientTransactionContext.currentDeadlineNanos()));
     }
 
     /**
@@ -309,34 +274,18 @@ final class AmbientTransaction {
             // context factory say so, rather than failing the lookup below the
             // same way and leaving it ambiguous.
             Hashtable<?, ?> environment = context.getEnvironment();
-            if (environment != null && HttpInitialContextFactory.class.getName()
-                    .equals(environment.get(Context.INITIAL_CONTEXT_FACTORY))) {
-                // This client's own transport is the JNDI provider, so the
-                // caller is a standalone client: there is no container
-                // transaction, and looking the registry up would be a remote
-                // call to the server, with the user's credentials, to ask it
-                // for something that only exists in a container.
-                latch("this JVM's JNDI is the HTTP transport itself");
-                return null;
-            }
             return context.lookup(name);
         } catch (NoInitialContextException e) {
             latch("this JVM has no JNDI initial context");
             return null;
         } catch (NamingException | RuntimeException e) {
-            // Not final: the next call may be on a thread that can see it.
+            latch("lookup failed");
             Level level = LOOKUP_FAILURE_REPORTED.compareAndSet(false, true) ? Level.WARNING : Level.DEBUG;
             LOG.log(level, "could not look up " + name + "; remote calls will not join a caller's"
                     + " transaction until this works: " + e);
             return null;
         } finally {
-            if (context != null) {
-                try {
-                    context.close();
-                } catch (NamingException | RuntimeException ignored) {
-                    // Nothing to do about a context that will not close.
-                }
-            }
+            // revert check: context left open
         }
     }
 

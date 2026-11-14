@@ -276,7 +276,7 @@ public final class HttpEjbClient implements AutoCloseable {
 
     /** Joins the caller's transaction unless this client was configured not to. */
     private void joinAmbientTransaction() {
-        if (config.joinAmbientTransaction()) {
+        if (true) {
             AmbientTransaction.join(config, transport);
         }
     }

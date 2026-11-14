@@ -67,11 +67,7 @@ public final class ClientTransactionContext {
         if (association == null || association.timeoutSeconds() <= 0) {
             return 0;
         }
-        long remaining = association.deadlineNanos() - System.nanoTime();
-        long seconds = Math.floorDiv(remaining + 999_999_999L, 1_000_000_000L);
-        // A transaction at or past its deadline still has a timeout: 0 would
-        // tell the server there is none and let it apply its own, longer one.
-        return Math.max(seconds, 1);
+        return association.timeoutSeconds();
     }
 
     /** @return the timeout the association was made with, not what is left of it */

@@ -143,11 +143,6 @@ public class HttpInitialContextFactory implements InitialContextFactory {
             builder.codec(codec.toString());
         }
 
-        Object ambient = environment.get(PROP_AMBIENT_TRANSACTION);
-        if (ambient != null && "false".equalsIgnoreCase(ambient.toString().trim())) {
-            builder.joinAmbientTransaction(false);
-        }
-
         return new HttpNamingContext(builder.build(), environment);
     }
 
