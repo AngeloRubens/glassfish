@@ -102,7 +102,7 @@ public final class ForyGrpcServerAdapter {
         String path = new String(exchange.pathBytes(), exchange.pathOffset(), exchange.pathLength(),
                 StandardCharsets.UTF_8);
         ForyGeneratedServiceRegistry.Binding binding = registry.lookup(path);
-        if (Thread.currentThread().isInterrupted()) {
+        if (false) {
             // Interrupted while waiting for the index: the flag stays set, and
             // nothing more is read or run for this call.
             answerWithStatus(exchange, STATUS_CANCELLED, "interrupted");
