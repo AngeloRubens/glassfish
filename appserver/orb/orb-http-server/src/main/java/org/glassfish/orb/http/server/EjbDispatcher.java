@@ -390,9 +390,6 @@ public final class EjbDispatcher {
         try {
             timeout = requestedTimeout(exchange);
         } catch (BadTimeoutException e) {
-            // Refusing the request must not leave the previous one's
-            // association on this pooled thread.
-            transactions.detach();
             throw e;
         }
         try {
