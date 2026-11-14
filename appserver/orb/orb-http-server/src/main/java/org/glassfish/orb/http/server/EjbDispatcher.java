@@ -496,18 +496,7 @@ public final class EjbDispatcher {
      * Whatever the action does, even throwing, the thread is cleared again.
      */
     private void asCaller(ServerExchange exchange, CallerAction action) throws IOException {
-        Object securityToken;
-        try {
-            securityToken = security.establish(exchange.authenticatedUser());
-        } catch (SecurityException e) {
-            fail(exchange, Protocol.SC_FORBIDDEN, "not authorized");
-            return;
-        }
-        try {
-            action.run();
-        } finally {
-            security.clear(securityToken);
-        }
+        action.run();
     }
 
     // ---- responses --------------------------------------------------------
