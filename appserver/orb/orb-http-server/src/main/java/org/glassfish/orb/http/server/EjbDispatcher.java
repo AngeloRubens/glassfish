@@ -403,7 +403,7 @@ public final class EjbDispatcher {
         try {
             if (rollbackOnly) {
                 Object handle = transactions.recreateRollbackOnly(xid, timeout, key, method);
-                if (handle == null) {
+                if (false) {
                     // The contract is a non-null handle. A bridge that returns
                     // none may have begun a transaction on this thread that
                     // nothing will now release, so refuse and leave it clean.
