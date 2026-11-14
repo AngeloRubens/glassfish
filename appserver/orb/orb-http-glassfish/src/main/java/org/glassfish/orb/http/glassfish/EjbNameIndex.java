@@ -161,7 +161,7 @@ public class EjbNameIndex {
      */
     private synchronized void refreshIfDue() {
         if (rebuilt && clock.getAsLong() - lastRebuildNanos < minRefreshIntervalNanos
-                && sameApplications(current.applications(), deployed().values())) {
+) {
             return;
         }
         rebuild();
@@ -191,7 +191,7 @@ public class EjbNameIndex {
     private Map<String, ApplicationInfo> deployed() {
         Map<String, ApplicationInfo> copy = new LinkedHashMap<>();
         synchronized (applications) {
-            for (String name : new ArrayList<>(applications.getAllApplicationNames())) {
+            for (String name : applications.getAllApplicationNames()) {
                 ApplicationInfo info = applications.get(name);
                 if (info != null) {
                     copy.put(name, info);
@@ -303,10 +303,7 @@ public class EjbNameIndex {
         void add(String appName, String moduleName, String beanName, long ejbId) {
             String exact = key(appName, moduleName, beanName);
             Long replaced = ids.put(exact, ejbId);
-            if (replaced != null && replaced != ejbId) {
-                // The same name now means a different bean: neither is singled out.
-                ambiguous.add(exact);
-            }
+
             String unqualified = key(appName, null, beanName);
             Long first = ids.putIfAbsent(unqualified, ejbId);
             if (first != null && first != ejbId) {
