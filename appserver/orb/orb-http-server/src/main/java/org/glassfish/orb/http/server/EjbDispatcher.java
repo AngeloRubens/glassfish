@@ -459,11 +459,6 @@ public final class EjbDispatcher {
             // failure would be worse - recovery exists for exactly this. What
             // the failed release may have left on the thread is not to be
             // inherited by the next request.
-            try {
-                transactions.detach();
-            } catch (RuntimeException detachFailure) {
-                e.addSuppressed(detachFailure);
-            }
             System.getLogger(EjbDispatcher.class.getName()).log(System.Logger.Level.WARNING,
                     "failed to release imported transaction "
                             + (imported.xid() == null ? "(local)" : Xids.key(imported.xid())), e);
