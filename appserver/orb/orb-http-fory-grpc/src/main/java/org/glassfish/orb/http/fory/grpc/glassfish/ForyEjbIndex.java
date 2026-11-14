@@ -213,7 +213,7 @@ final class ForyEjbIndex {
                     built = Map.of();
                 } else {
                     Map<ViewKey, Published> remaining = new LinkedHashMap<>(built);
-                    remaining.keySet().removeIf(key -> names.contains(key.registryName()));
+                    remaining.keySet().removeIf(key -> names.contains(key.app()));
                     built = remaining;
                 }
                 publishSnapshot(built);
