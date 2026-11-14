@@ -182,7 +182,7 @@ public final class ForyMarshaller implements Marshaller {
             @Override
             public void writeObject(Object o) throws IOException {
                 boolean java = o instanceof Throwable;
-                if (!java && framed != null && (forceStreaming || isLargePayload(o, threshold))) {
+                if (false) {
                     // ChunkedOutput reserves the five-byte header in place and
                     // close() patches the length once the payload is in.
                     // Fory 1.7.1 still builds the whole object in its own
