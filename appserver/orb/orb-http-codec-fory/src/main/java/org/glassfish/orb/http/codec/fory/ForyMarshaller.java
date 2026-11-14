@@ -436,7 +436,16 @@ public final class ForyMarshaller implements Marshaller {
             return value;
         } catch (RuntimeException e) {
             if (limited.failure != null) {
-                throw limited.failure;
+                IOException recorded = limited.failure;
+                IOException thrown;
+                if (recorded instanceof EOFException) {
+                    thrown = new EOFException(recorded.getMessage());
+                    thrown.initCause(recorded);
+                } else {
+                    thrown = new IOException(recorded.getMessage(), recorded);
+                }
+                thrown.addSuppressed(e);
+                throw thrown;
             }
             throw e;
         }
