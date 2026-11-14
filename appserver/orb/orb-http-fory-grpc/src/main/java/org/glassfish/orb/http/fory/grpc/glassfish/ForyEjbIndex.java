@@ -265,9 +265,6 @@ final class ForyEjbIndex {
             if (generation != seen && !stale) {
                 return; // another request rebuilt while this one waited
             }
-            if (readFailing && clock.getAsLong() - lastRebuild < MIN_REBUILD_INTERVAL_NANOS) {
-                return; // the registry could not be read a moment ago
-            }
             if (!stale && clock.getAsLong() - lastRebuild < MIN_REBUILD_INTERVAL_NANOS) {
                 return;
             }
