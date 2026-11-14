@@ -276,7 +276,6 @@ final class ForyEjbIndex {
             // On every path, including the early returns: a drop that found the
             // lock taken left its work for whoever held it.
             rebuilding.unlock();
-            applyPendingDrops();
         }
     }
 
