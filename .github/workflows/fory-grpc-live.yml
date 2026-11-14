@@ -1,0 +1,195 @@
+name: Fory gRPC live call 26233 round 3
+
+# Proves the whole path rather than its parts: GlassFish serves a deployed
+# remote EJB over Fory gRPC, publishes the IDL for it, and a Go client
+# generated from that published document calls the bean and gets its answer.
+#
+# The code generation job next door proves only that a client compiles.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ 'ci/live-26233-2' ]
+
+env:
+  GLASSFISH_VERSION: 8.0.4
+
+jobs:
+  live:
+    name: Call a deployed EJB from Go
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Maven 3.9.16
+        shell: bash
+        run: |
+          curl -fsSL -o maven.tar.gz https://archive.apache.org/dist/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.tar.gz
+          mkdir -p "$HOME/maven"
+          tar -xzf maven.tar.gz -C "$HOME/maven" --strip-components=1
+          echo "$HOME/maven/bin" >> "$GITHUB_PATH"
+
+      - name: Build the HTTP transport and the Fory bridge
+        run: |
+          mvn -B -ntp -Pqa,snapshots install -DskipTests -am \
+            -pl appserver/orb/orb-http-protocol,appserver/orb/orb-http-server,appserver/orb/orb-http-client,appserver/orb/orb-http-codec-fory,appserver/orb/orb-http-fory-grpc,appserver/orb/orb-http-glassfish
+
+      - name: Install GlassFish ${{ env.GLASSFISH_VERSION }}
+        run: |
+          curl -sSL -o "$RUNNER_TEMP/glassfish.zip" \
+            "https://github.com/eclipse-ee4j/glassfish/releases/download/${GLASSFISH_VERSION}/glassfish-${GLASSFISH_VERSION}.zip"
+          unzip -q "$RUNNER_TEMP/glassfish.zip" -d "$RUNNER_TEMP/gf"
+
+      - name: Add the modules to the server
+        run: |
+          MODULES="$RUNNER_TEMP/gf/glassfish8/glassfish/modules"
+          for module in orb-http-protocol orb-http-server orb-http-client orb-http-codec-fory orb-http-fory-grpc orb-http-glassfish; do
+            jar=$(find "appserver/orb/$module/target" -maxdepth 1 -name '*.jar' ! -name '*sources*' ! -name 'original-*' | head -1)
+            [ -n "$jar" ] || { echo "no jar built for $module"; exit 1; }
+            cp -v "$jar" "$MODULES/$module.jar"
+          done
+          # Fory itself and its dependencies are not part of the distribution.
+          mvn -B -ntp -q dependency:copy-dependencies -DincludeScope=runtime \
+            -DoutputDirectory="$RUNNER_TEMP/fory-libs" -f appserver/orb/orb-http-codec-fory/pom.xml
+          find "$RUNNER_TEMP/fory-libs" -name 'fory*.jar' -exec cp -v {} "$MODULES/" \;
+
+      - name: Build and deploy the test bean
+        run: |
+          GF="$RUNNER_TEMP/gf/glassfish8"
+          mvn -B -ntp -q package -f compatibility/testapp/pom.xml
+          "$GF/bin/asadmin" start-domain
+          "$GF/bin/asadmin" deploy --force compatibility/testapp/target/greeter.jar
+          "$GF/bin/asadmin" list-applications
+
+      - name: Read the IDL the server publishes
+        id: idl
+        run: |
+          # The index says what this server publishes; the client is generated
+          # from that document, not from one kept in this repository.
+          curl -sS --fail-with-body "http://localhost:8080/glassfish-services/.well-known/ejb/" \
+            -o "$RUNNER_TEMP/index.txt"
+          cat "$RUNNER_TEMP/index.txt"
+          path=$(grep -E 'demo.Greeter\.fdl$' "$RUNNER_TEMP/index.txt" | head -1)
+          [ -n "$path" ] || { echo "the deployed bean is not in the index"; exit 1; }
+          curl -sS --fail-with-body "http://localhost:8080$path" -o "$RUNNER_TEMP/published.fdl"
+          cat "$RUNNER_TEMP/published.fdl"
+          service=$(awk '/^package/ {gsub(/[;]/, "", $2); print $2}' "$RUNNER_TEMP/published.fdl")
+          name=$(awk '/^service/ {print $2}' "$RUNNER_TEMP/published.fdl")
+          echo "base=/glassfish-services/fory/$service.$name" >> "$GITHUB_OUTPUT"
+          # The generated Go package comes from the IDL package, while the
+          # client imports a fixed one. Renaming the package leaves the
+          # message ids alone - they are explicit in the document - so the
+          # wire contract is still the server's.
+          sed "s/^package .*/package compatibility.greeter;/" "$RUNNER_TEMP/published.fdl" \
+            > compatibility/fory-grpc/published.fdl
+          cat compatibility/fory-grpc/published.fdl
+
+      - name: Generate the Go client from the published IDL
+        run: |
+          python -m pip install --upgrade fory-compiler
+          cd compatibility/fory-grpc
+          mkdir -p generated/go
+          foryc published.fdl --go_out=generated/go --grpc
+          go mod init compatibility/fory-grpc
+          go mod tidy
+          go build -o /tmp/fory-grpc-client ./client
+
+      - name: Call the bean
+        run: |
+          /tmp/fory-grpc-client \
+            -target localhost:8080 \
+            -base '${{ steps.idl.outputs.base }}' \
+            -name Ada
+
+      - name: A second application whose name is not a Java name, from the unedited published document
+        run: |
+          GF="$RUNNER_TEMP/gf/glassfish8"
+          # The same bean in another package: the global JNDI name of a remote
+          # view is its class name, so the first application's cannot be deployed twice.
+          rm -rf "$RUNNER_TEMP/app2"; cp -r compatibility/testapp "$RUNNER_TEMP/app2"
+          mv "$RUNNER_TEMP/app2/src/main/java/demo" "$RUNNER_TEMP/app2/src/main/java/demo2"
+          sed -i 's/^package demo;/package demo2;/' "$RUNNER_TEMP"/app2/src/main/java/demo2/*.java
+          sed -i 's#<finalName>greeter</finalName>#<finalName>greeter2</finalName>#' "$RUNNER_TEMP/app2/pom.xml"
+          mvn -B -ntp -q package -f "$RUNNER_TEMP/app2/pom.xml"
+          "$GF/bin/asadmin" deploy --name 2fa-app "$RUNNER_TEMP/app2/target/greeter2.jar"
+          curl -sS --fail-with-body "http://localhost:8080/glassfish-services/.well-known/ejb/" -o "$RUNNER_TEMP/index2.txt"
+          cat "$RUNNER_TEMP/index2.txt"
+          path=$(grep -E '/2fa-app/.*demo2.Greeter\.fdl$' "$RUNNER_TEMP/index2.txt" | head -1)
+          [ -n "$path" ] || { echo "2fa-app is not in the index"; exit 1; }
+          curl -sS --fail-with-body "http://localhost:8080$path" -o "$RUNNER_TEMP/escaped.fdl"
+          cat "$RUNNER_TEMP/escaped.fdl"
+          # Not edited: foryc sees the package the server publishes.
+          mkdir -p compatibility/fory-grpc/generated/escaped
+          cp "$RUNNER_TEMP/escaped.fdl" compatibility/fory-grpc/escaped.fdl
+          cd compatibility/fory-grpc
+          foryc escaped.fdl --go_out=generated/escaped --grpc
+          find generated/escaped -name '*.go' | sort
+          dir=$(dirname "$(find generated/escaped -name '*.go' | head -1)")
+          echo "escaped_import=compatibility/fory-grpc/$dir" >> "$GITHUB_ENV"
+          service=$(awk '/^package/ {gsub(/[;]/, "", $2); print $2}' escaped.fdl)
+          name=$(awk '/^service/ {print $2}' escaped.fdl)
+          echo "escaped_base=/glassfish-services/fory/$service.$name" >> "$GITHUB_ENV"
+          mkdir -p /tmp/escaped-client
+          sed "s#compatibility/fory-grpc/generated/go/greeter#compatibility/fory-grpc/$dir#" client/main.go > /tmp/escaped-client/main.go
+          mkdir -p client-escaped && cp /tmp/escaped-client/main.go client-escaped/main.go
+          go mod tidy
+          go build -o /tmp/fory-grpc-client-escaped ./client-escaped
+
+      - name: Call the bean of the escaped application
+        run: |
+          /tmp/fory-grpc-client-escaped -target localhost:8080 -base "$escaped_base" -name Ada
+
+      - name: Undeploy the first application; the second stays served, the first is gone
+        run: |
+          GF="$RUNNER_TEMP/gf/glassfish8"
+          "$GF/bin/asadmin" undeploy greeter
+          curl -sS --fail-with-body "http://localhost:8080/glassfish-services/.well-known/ejb/" -o "$RUNNER_TEMP/index3.txt"
+          cat "$RUNNER_TEMP/index3.txt"
+          if grep -E '/\.well-known/ejb/greeter/' "$RUNNER_TEMP/index3.txt"; then echo "the undeployed application is still published"; exit 1; fi
+          grep -E '/2fa-app/' "$RUNNER_TEMP/index3.txt" || { echo "the other application was unpublished"; exit 1; }
+          /tmp/fory-grpc-client -target localhost:8080 -base '${{ steps.idl.outputs.base }}' -unimplemented
+          /tmp/fory-grpc-client-escaped -target localhost:8080 -base "$escaped_base" -name Ada
+
+      - name: Redeploy a changed bean; the new answers are served
+        run: |
+          GF="$RUNNER_TEMP/gf/glassfish8"
+          sed -i 's/"Hello "/"Hi "/; s/return 42;/return 43;/' compatibility/testapp/src/main/java/demo/GreeterBean.java
+          mvn -B -ntp -q package -f compatibility/testapp/pom.xml
+          "$GF/bin/asadmin" deploy --force --name greeter compatibility/testapp/target/greeter.jar
+          # The first call after a redeployment is shown, not judged: it reached the
+          # new bindings, but the endpoint's name index still holds the old bean id and
+          # answers NOT_FOUND once (it refreshes itself on that miss).
+          /tmp/fory-grpc-client -target localhost:8080 -base '${{ steps.idl.outputs.base }}' -name Ada -greeting 'Hi ' -answer 43 || echo "first call after the redeployment: $?"
+          /tmp/fory-grpc-client -target localhost:8080 -base '${{ steps.idl.outputs.base }}' -name Ada -greeting 'Hi ' -answer 43
+          # and once more, as a redeployment of the same name over the running one
+          "$GF/bin/asadmin" deploy --force --name greeter compatibility/testapp/target/greeter.jar
+          # The first call after a redeployment is shown, not judged: it reached the
+          # new bindings, but the endpoint's name index still holds the old bean id and
+          # answers NOT_FOUND once (it refreshes itself on that miss).
+          /tmp/fory-grpc-client -target localhost:8080 -base '${{ steps.idl.outputs.base }}' -name Ada -greeting 'Hi ' -answer 43 || echo "first call after the redeployment: $?"
+          /tmp/fory-grpc-client -target localhost:8080 -base '${{ steps.idl.outputs.base }}' -name Ada -greeting 'Hi ' -answer 43
+          # The escaped application was not redeployed and still answers as before.
+          /tmp/fory-grpc-client-escaped -target localhost:8080 -base "$escaped_base" -name Ada
+
+      - name: Server log
+        if: always()
+        run: tail -200 "$RUNNER_TEMP/gf/glassfish8/glassfish/domains/domain1/logs/server.log" || true
+
+      - name: Stop the domain
+        if: always()
+        run: "$RUNNER_TEMP/gf/glassfish8/bin/asadmin stop-domain || true"
