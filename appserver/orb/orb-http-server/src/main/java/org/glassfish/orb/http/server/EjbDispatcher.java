@@ -386,6 +386,9 @@ public final class EjbDispatcher {
             return null;
         }
         Xid xid = Xids.fromContext(txContext);
+        if (xid == null) {
+            transactions.detach();
+        }
         long timeout;
         try {
             timeout = requestedTimeout(exchange);
