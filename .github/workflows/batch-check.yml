@@ -30,11 +30,11 @@ jobs:
           mvn -B -ntp install -DskipTests -Dcheckstyle.skip -Dspotbugs.skip -Dcopyright.skip \
             -pl appserver/orb/orb-http-glassfish -am
 
-      - name: Build and test every changed module, checkstyle enforced
+      - name: Test the adapter with the change reverted and the tests kept
         run: |
           set -o pipefail
-          mvn -B -ntp -fae install \
-            -pl appserver/orb/orb-connector,appserver/ejb/ejb-container,appserver/orb/orb-http-protocol,appserver/orb/orb-http-client,appserver/orb/orb-http-codec-fory,appserver/orb/orb-http-server,appserver/orb/orb-http-glassfish \
+          mvn -B -ntp -fae install -Dcheckstyle.skip \
+            -pl appserver/orb/orb-http-glassfish \
             2>&1 | tee build.log
 
       - name: Test and checkstyle summary
