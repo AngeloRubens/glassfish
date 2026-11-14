@@ -397,11 +397,7 @@ public final class EjbDispatcher {
             // A manager that fails halfway may already have associated the
             // thread, and nothing will release a branch that was never
             // returned. Leave the thread with no transaction instead.
-            try {
-                transactions.detach();
-            } catch (RuntimeException detachFailure) {
-                e.addSuppressed(detachFailure);
-            }
+            transactions.detach();
             throw e;
         }
         return xid;

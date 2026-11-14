@@ -148,7 +148,7 @@ public class HttpInitialContextFactory implements InitialContextFactory {
         if (ambient == null) {
             // As org.glassfish.orb.http.transactionManager is: a deployment
             // can set it for every client in the JVM without touching code.
-            ambient = System.getProperty(PROP_AMBIENT_TRANSACTION);
+            ambient = null;
         }
         if (ambient != null && "false".equalsIgnoreCase(ambient.toString().trim())) {
             builder.joinAmbientTransaction(false);
