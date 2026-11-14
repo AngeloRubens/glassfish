@@ -205,11 +205,7 @@ public class GlassFishContainerBridge implements ContainerBridge {
         } catch (CreateException | RemoteException e) {
             // What the caller is told is fixed: the container's own text can
             // name the bean's internals. The cause is kept and logged.
-            LOG.log(Level.DEBUG, "cannot create a session for " + beanName, e);
-            SessionRefusedException refused = new SessionRefusedException(
-                    "cannot create a session for " + beanName);
-            refused.initCause(e);
-            throw refused;
+            throw new SessionRefusedException("cannot create a session for " + beanName + ": " + e.getMessage());
         }
     }
 
@@ -230,9 +226,6 @@ public class GlassFishContainerBridge implements ContainerBridge {
     @Override
     public void removeSession(EjbKey key) throws NoSuchTargetException, SessionRefusedException {
         EjbContainerFacade facade = facade(key);
-        if (!isStateful(facade)) {
-            throw new SessionRefusedException("this bean has no sessions to remove");
-        }
         try {
             facade.removeSession(key.instanceKey());
         } catch (NoSuchObjectLocalException gone) {
@@ -240,10 +233,7 @@ public class GlassFishContainerBridge implements ContainerBridge {
         } catch (RemoveException | RemoteException e) {
             // The container's own wording is not the caller's business.
             LOG.log(Level.DEBUG, "cannot remove session for " + key, e);
-            SessionRefusedException refused = new SessionRefusedException(
-                    "the session cannot be removed now");
-            refused.initCause(e);
-            throw refused;
+            throw new NoSuchTargetException("cannot remove session for " + key + ": " + e.getMessage());
         }
     }
 
@@ -318,7 +308,7 @@ public class GlassFishContainerBridge implements ContainerBridge {
         if (facade == null) {
             // The index named a bean the container no longer has - an
             // application undeployed between the lookup and the call.
-            index.forget(ejbId);
+            index.refresh();
             throw new NoSuchTargetException("no container for ejbId " + ejbId);
         }
         return facade;
