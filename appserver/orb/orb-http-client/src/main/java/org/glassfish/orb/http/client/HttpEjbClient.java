@@ -301,7 +301,7 @@ public final class HttpEjbClient implements AutoCloseable {
                 // can do nothing about.
                 drain(response.body());
                 downgrade();
-                request = buildInvocation(locator, viewClass, method, args, newInvocationId(), rollbackOnly);
+                request = buildInvocation(locator, viewClass, method, args, newInvocationId(), false);
                 response = transport.exchange(request);
             }
         } catch (InterruptedException e) {
