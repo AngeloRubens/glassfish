@@ -490,13 +490,6 @@ public final class ForyMarshaller implements Marshaller {
             return count;
         }
 
-        @Override
-        public int available() throws IOException {
-            // Without this the default of 0 makes the decoder grow its buffer
-            // by doubling, copying it each time, for a frame whose size is known.
-            return Math.min(remaining, delegate.available());
-        }
-
         private void truncated() {
             failure = new EOFException("truncated Fory frame: expected " + length
                     + " bytes but the stream ended after " + (length - remaining));
