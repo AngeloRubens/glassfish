@@ -369,7 +369,7 @@ final class AmbientTransaction {
         if (known != null) {
             return known;
         }
-        ClassLoader loader = Thread.currentThread().getContextClassLoader();
+        ClassLoader loader = AmbientTransaction.class.getClassLoader();
         Long retryAt = MISSES.get(loader);
         if (retryAt != null && clock.getAsLong() - retryAt < 0) {
             // A lookup from this loader's threads failed a moment ago.
