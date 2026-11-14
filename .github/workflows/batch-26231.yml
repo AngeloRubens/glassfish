@@ -1,0 +1,68 @@
+name: batch-26231
+on:
+  push:
+    branches: ['ci/batch-26231-*', 'check/batch-26231-*']
+  workflow_dispatch:
+env:
+  MODULES: appserver/orb/orb-http-protocol,appserver/orb/orb-http-client,appserver/orb/orb-http-server,appserver/orb/orb-http-codec-fory,appserver/orb/orb-http-glassfish
+jobs:
+  strict:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Install Maven 3.9.16
+        run: |
+          curl -fsSL https://archive.apache.org/dist/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.tar.gz | tar -xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/apache-maven-3.9.16/bin" >> "$GITHUB_PATH"
+      - name: Install upstream modules
+        run: |
+          mvn -v
+          mvn -B -ntp install -DskipTests -am -pl "$MODULES"
+      - name: Strict build of the orb-http modules
+        if: ${{ !startsWith(github.ref_name, 'check/') }}
+        run: mvn -B -ntp install -pl "$MODULES"
+      - name: Build of the orb-http modules for a revert check (failures are reported, not fatal)
+        if: ${{ startsWith(github.ref_name, 'check/') }}
+        run: mvn -B -ntp -fae -Dmaven.test.failure.ignore=true install -pl "$MODULES"
+      - name: Summary
+        if: always()
+        run: |
+          for m in ${MODULES//,/ }; do
+            echo "== $m"
+            grep -h -E 'Tests run:.*(Fail|Err)' $m/target/surefire-reports/*.txt 2>/dev/null | awk '{r+=$3; f+=$5; e+=$7; s+=$9} END {print "files with results:", NR}' || true
+            grep -l -E 'FAILURE|ERROR' $m/target/surefire-reports/*.txt 2>/dev/null | sed 's/^/  failing: /' || true
+          done
+          grep -h -E 'Tests run:|Skipped' appserver/orb/orb-http-codec-fory/target/surefire-reports/*ForyCodecBenchmarkTest.txt || true
+  bench:
+    if: ${{ !startsWith(github.ref_name, 'check/') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        run: [1, 2, 3]
+    name: bench-${{ matrix.run }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Install Maven 3.9.16
+        run: |
+          curl -fsSL https://archive.apache.org/dist/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.tar.gz | tar -xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/apache-maven-3.9.16/bin" >> "$GITHUB_PATH"
+      - name: Build the modules the codec needs
+        run: mvn -B -ntp install -DskipTests -am -pl appserver/orb/orb-http-codec-fory
+      - name: Benchmark
+        run: |
+          grep -m1 'model name' /proc/cpuinfo; nproc
+          mvn -B -ntp -Dorb.benchmark=true -Dtest=ForyCodecBenchmarkTest -Dsurefire.failIfNoSpecifiedTests=false -Dcheckstyle.skip=true -Denforcer.skip=true test -pl appserver/orb/orb-http-codec-fory | tee bench.log
+          echo "run ${{ matrix.run }}"; grep RESULT bench.log

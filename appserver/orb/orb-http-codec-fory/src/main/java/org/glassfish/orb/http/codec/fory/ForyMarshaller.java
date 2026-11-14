@@ -53,6 +53,32 @@ import org.glassfish.orb.http.protocol.Marshaller;
  * and remote calls already rely on all three. Fory is configured to match
  * rather than to be fast in ways that would silently alter what an
  * application observes - see the settings in {@link #newFory}.
+ *
+ * <h2>Properties</h2>
+ * All three are read when a writer or a reader is created, not for every
+ * object, so a change applies to the next one.
+ * <ul>
+ *   <li>{@code org.glassfish.orb.http.codec.fory.streaming} (writer): when
+ *       {@code true}, every object written to a {@link ChunkedOutput} (other
+ *       than a throwable) is encoded through the framed stream, whatever its
+ *       size. Default {@code false}: the size heuristic below decides.</li>
+ *   <li>{@link #STREAMING_THRESHOLD_PROPERTY} (writer): the <em>estimated</em>
+ *       size in bytes from which an object is encoded through the framed
+ *       stream. It is an estimate made before encoding (two bytes per
+ *       character of a string, the element size times the length of an array,
+ *       16 bytes per element of a collection or map; any other object is never
+ *       large), not the encoded length. Default 4096. A negative value turns
+ *       the heuristic off; 0 streams every object that is not a throwable.
+ *       A blank or non numeric value means the default. It has no effect on
+ *       reading.</li>
+ *   <li>{@link #STREAMING_DECODE_THRESHOLD_PROPERTY} (reader): the <em>encoded
+ *       frame length</em> in bytes, as read from the frame header, from which a
+ *       Fory frame is decoded straight from the input stream instead of from
+ *       an array. Off by default, and it is independent of the encode
+ *       threshold. A negative, blank or non numeric value leaves it off; 0
+ *       decodes every Fory frame from the stream. Frames of the Java
+ *       serialization kind are always read into an array.</li>
+ * </ul>
  */
 public final class ForyMarshaller implements Marshaller {
 
@@ -60,6 +86,17 @@ public final class ForyMarshaller implements Marshaller {
 
     /** The largest buffer a streamed decode starts with; bigger frames grow it. */
     private static final int MAX_STREAM_BUFFER = 64 * 1024;
+
+    /** Frames decoded from the stream; read by tests. */
+    private static final LongAdder STREAMED_DECODES = new LongAdder();
+
+    /**
+     * @return how many frames this codec has decoded straight from the input
+     *         stream since the class was loaded
+     */
+    static long streamedDecodeCount() {
+        return STREAMED_DECODES.sum();
+    }
 
     /** Frames written through {@link ChunkedOutput#beginFrame}; read by tests. */
     private static final LongAdder STREAMED_FRAMES = new LongAdder();
@@ -75,9 +112,20 @@ public final class ForyMarshaller implements Marshaller {
     /** Enables direct framed streaming after it has been validated for a deployment. */
     private static final String STREAMING_PROPERTY =
             "org.glassfish.orb.http.codec.fory.streaming";
-    /** Overrides the automatic large-payload threshold; bytes are estimated. */
+    /**
+     * Writer: the estimated size in bytes from which an object is encoded
+     * through the framed stream. Default 4096; negative never; see the class
+     * documentation.
+     */
     public static final String STREAMING_THRESHOLD_PROPERTY =
             "org.glassfish.orb.http.codec.fory.streaming.threshold";
+    /**
+     * Reader: the encoded frame length in bytes from which a Fory frame is
+     * decoded from the stream rather than from an array. Off unless set to a
+     * non negative number; see the class documentation.
+     */
+    public static final String STREAMING_DECODE_THRESHOLD_PROPERTY =
+            "org.glassfish.orb.http.codec.fory.streaming.decode.threshold";
 
     /** The codec token that travels in the content type. */
     public static final String CODEC = "fory";
@@ -275,6 +323,18 @@ public final class ForyMarshaller implements Marshaller {
         }
     }
 
+    private static int streamingDecodeThreshold() {
+        String configured = System.getProperty(STREAMING_DECODE_THRESHOLD_PROPERTY);
+        if (configured == null || configured.isBlank()) {
+            return -1;
+        }
+        try {
+            return Math.max(-1, Integer.parseInt(configured.trim()));
+        } catch (NumberFormatException ignored) {
+            return -1;
+        }
+    }
+
     private static int elementSize(Class<?> type) {
         if (type == byte.class || type == boolean.class) return 1;
         if (type == short.class || type == char.class) return 2;
@@ -291,10 +351,10 @@ public final class ForyMarshaller implements Marshaller {
         }
         ThreadSafeFory fory = readerFor(loader, filter);
         DataInputStream data = new DataInputStream(in);
-        // Frames at least this long are decoded from the stream; shorter ones
-        // are read into an array first, which is cheaper for them because the
-        // stream decoder allocates a buffer of its own for every frame.
-        int streamFrom = streamingThreshold();
+        // Opt-in: frames at least this long are decoded from the stream. By
+        // default every frame is read into an array, bounded by the bytes that
+        // actually arrive, and decoded from it.
+        int streamFrom = streamingDecodeThreshold();
         return new ObjectReader() {
 
             @Override
@@ -311,9 +371,11 @@ public final class ForyMarshaller implements Marshaller {
                 if (kind == KIND_FORY && streamFrom >= 0 && length >= streamFrom) {
                     return readStreamed(fory, data, length);
                 }
+                // readNBytes grows with the bytes received, so a header that
+                // promises more than the peer sends does not allocate it.
                 byte[] encoded = data.readNBytes(length);
                 if (encoded.length != length) {
-                    throw new IOException("truncated frame: expected " + length
+                    throw new EOFException("truncated frame: expected " + length
                             + " bytes but read " + encoded.length);
                 }
 
@@ -330,27 +392,46 @@ public final class ForyMarshaller implements Marshaller {
     }
 
     /**
+     * The buffer a streamed decode starts with: the frame length, but at most
+     * {@link #MAX_STREAM_BUFFER}, so a header that promises a lot does not
+     * allocate it before the bytes arrive.
+     */
+    static int streamBufferSize(int length) {
+        return Math.max(16, Math.min(length, MAX_STREAM_BUFFER));
+    }
+
+    /**
      * Decodes one frame straight from the stream.
      * <p>
      * Fory reports a stream that ends early, or fails, as an unchecked
      * exception from deep inside its buffer. The caller reads from a socket
-     * and expects an {@link IOException} for that, so the cause is kept by the
-     * limiting stream and rethrown here in its own type.
+     * and expects an {@link IOException} for that, so a new exception of the
+     * recorded type is thrown, with the recorded failure as its cause and
+     * Fory's exception suppressed on it. The recorded exception itself is not
+     * modified.
      */
     private static Object readStreamed(ThreadSafeFory fory, InputStream in, int length)
             throws IOException {
+        STREAMED_DECODES.increment();
         LimitedInputStream limited = new LimitedInputStream(in, length);
         try {
-            int buffer = Math.max(16, Math.min(length, MAX_STREAM_BUFFER));
-            Object value = fory.deserialize(new ForyInputStream(limited, buffer));
+            Object value = fory.deserialize(new ForyInputStream(limited, streamBufferSize(length)));
             limited.drain();
             return value;
         } catch (RuntimeException e) {
-            if (limited.failure != null) {
-                limited.failure.addSuppressed(e);
-                throw limited.failure;
+            IOException recorded = limited.failure;
+            if (recorded == null) {
+                throw e;
             }
-            throw e;
+            IOException thrown;
+            if (recorded instanceof EOFException) {
+                thrown = new EOFException(recorded.getMessage());
+                thrown.initCause(recorded);
+            } else {
+                thrown = new IOException(recorded.getMessage(), recorded);
+            }
+            thrown.addSuppressed(e);
+            throw thrown;
         }
     }
 
@@ -358,14 +439,14 @@ public final class ForyMarshaller implements Marshaller {
      * Prevent a streaming Fory decoder from consuming the next frame, and
      * remember why the frame could not be read to its end.
      */
-    private static final class LimitedInputStream extends InputStream {
+    static final class LimitedInputStream extends InputStream {
         private final InputStream delegate;
         private final int length;
         private int remaining;
         /** The reason the declared length could not be read, if that happened. */
         private IOException failure;
 
-        private LimitedInputStream(InputStream delegate, int length) {
+        LimitedInputStream(InputStream delegate, int length) {
             this.delegate = delegate;
             this.length = length;
             this.remaining = length;
@@ -391,6 +472,8 @@ public final class ForyMarshaller implements Marshaller {
 
         @Override
         public int read(byte[] b, int off, int len) throws IOException {
+            java.util.Objects.checkFromIndexSize(off, len, b.length);
+            if (len == 0) return 0;
             if (remaining == 0) return -1;
             int count;
             try {
