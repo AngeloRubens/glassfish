@@ -304,28 +304,11 @@ public final class HttpEjbClient implements AutoCloseable {
         return decoder.decodeInvocationResult(response, viewClass.getClassLoader());
     }
 
-    /**
-     * Best effort and not waited for: the caller has already waited one
-     * timeout and must not wait a second for the courtesy. The cancel only
-     * marks the invocation as abandoned (no interrupt): interrupting a thread
-     * in the middle of a transactional business method is not a decision for
-     * a client that has merely stopped listening.
-     */
+    /** Best effort: a cancel that fails changes nothing the caller can act on. */
     private void cancelQuietly(EjbLocator locator, String invocationId) {
         try {
-            URI uri = resolve(EjbRoutes.cancelPath(contextPath, locator.appName(), locator.moduleName(),
-                    locator.distinctName(), locator.beanName(), invocationId, false));
-            transport.exchangeAsync(new HttpTransport.Request("DELETE", uri, null, null, Map.of(), null))
-                    .whenComplete((response, error) -> {
-                        if (response != null) {
-                            try {
-                                response.close();
-                            } catch (IOException e) {
-                                // nothing to do about it
-                            }
-                        }
-                    });
-        } catch (RuntimeException e) {
+            cancel(locator, invocationId, true);
+        } catch (IOException | RuntimeException e) {
             // The original failure is the one to report.
         }
     }
@@ -333,7 +316,7 @@ public final class HttpEjbClient implements AutoCloseable {
     /**
      * @return whether the server refused the codec rather than the request
      */
-    boolean isUnsupportedCodec(HttpTransport.Response response) {
+    private boolean isUnsupportedCodec(HttpTransport.Response response) {
         if (response.status() != Protocol.SC_NOT_ACCEPTABLE
                 || marshaller.codec().equals(ContentType.CODEC_JSER)
                 || config.codec() != null) {
@@ -356,7 +339,7 @@ public final class HttpEjbClient implements AutoCloseable {
      * failed round trip every time would be worse than not having the codec at
      * all.
      */
-    void downgrade() {
+    private void downgrade() {
         Marshaller builtIn = new JavaSerializationMarshaller();
         this.marshaller = builtIn;
         this.decoder = new ResponseDecoder(builtIn, filter, config.codec());
@@ -463,10 +446,6 @@ public final class HttpEjbClient implements AutoCloseable {
     /** @return the HTTP version the last exchange actually used. */
     public String negotiatedVersion() {
         return transport.negotiatedVersion();
-    }
-
-    Marshaller marshaller() {
-        return marshaller;
     }
 
     ObjectInputFilter deserializationFilter() {

@@ -195,24 +195,19 @@ public final class EjbDispatcher {
                 } catch (ClassNotFoundException e) {
                     // The caller sent a class this application does not have.
                     // That is a bad request, not a missing bean.
-                    registration.finish();
-                    failRead(exchange, registration, "unknown class in the request body: " + e.getMessage());
+                    fail(exchange, Protocol.SC_BAD_REQUEST, "unknown class in the request body: " + e.getMessage());
                     return;
                 } catch (IOException | RuntimeException | LinkageError e) {
                     // A body that does not decode - truncated, corrupt, refused by
                     // the filter, or written by another codec. The caller's fault,
-                    // so not a 500 with a stack trace - unless the caller cancelled
-                    // while it was being read, which is what interrupted the read.
-                    registration.finish();
-                    failRead(exchange, registration, "malformed request body: " + e.getClass().getSimpleName());
+                    // so not a 500 with a stack trace.
+                    fail(exchange, Protocol.SC_BAD_REQUEST,
+                            "malformed request body: " + e.getClass().getSimpleName());
                     return;
                 }
 
                 target = container.getTargetObject(key, invocation.viewClass());
                 Object result = unwrapAsyncResult(callTarget(target, method, args));
-                // Over: a cancel arriving now must not leave an interrupt on
-                // this thread while the response is written.
-                registration.finish();
 
                 if (registration.isCancelled()) {
                     // The result is discarded on purpose: the caller has said
@@ -225,7 +220,6 @@ public final class EjbDispatcher {
             } catch (ContainerBridge.NoSuchTargetException e) {
                 fail(exchange, Protocol.SC_NOT_FOUND, e.getMessage());
             } catch (InvocationTargetException e) {
-                registration.finish();
                 if (registration.isCancelled()) {
                     // The caller cancelled and this is what the cancellation did
                     // to the bean - typically an InterruptedException. Reporting
@@ -240,6 +234,10 @@ public final class EjbDispatcher {
                     Throwable thrown = e.getCause() != null ? e.getCause() : e;
                     writeException(codec, exchange, EjbExceptions.toClientException(thrown, invokedMethod));
                 }
+            } catch (IllegalArgumentException e) {
+                // Method.invoke refusing the arguments it was given: a wrong
+                // number or a wrong type. The bean never ran.
+                fail(exchange, Protocol.SC_BAD_REQUEST, "arguments do not match the method");
             } catch (ClassNotFoundException | NoSuchMethodException e) {
                 fail(exchange, Protocol.SC_NOT_FOUND, e.toString());
             } catch (IllegalAccessException e) {
@@ -282,7 +280,7 @@ public final class EjbDispatcher {
     }
 
     private Object callTarget(Object target, Method method, Object[] args)
-            throws InvocationTargetException, IllegalAccessException, NoSuchMethodException, ProtocolException {
+            throws InvocationTargetException, IllegalAccessException, NoSuchMethodException {
         Method callable = method;
         if (!method.getDeclaringClass().isInstance(target)) {
             // The container handed back an object that implements the view
@@ -290,15 +288,7 @@ public final class EjbDispatcher {
             callable = target.getClass().getMethod(method.getName(), method.getParameterTypes());
         }
         callable.setAccessible(true);
-        try {
-            return callable.invoke(target, args);
-        } catch (IllegalArgumentException e) {
-            // Method.invoke refusing the arguments it was given - a wrong
-            // number or a wrong type - before the method body was entered.
-            // Only this call is mapped: an IllegalArgumentException from
-            // anywhere else in the dispatch is not the caller's arguments.
-            throw new ProtocolException("arguments do not match the method");
-        }
+        return callable.invoke(target, args);
     }
 
     /**
@@ -473,15 +463,6 @@ public final class EjbDispatcher {
             writer.flush();
         }
         return out.toByteBuffers();
-    }
-
-    private static void failRead(ServerExchange exchange, InvocationRegistry.Registration registration,
-                                 String reason) {
-        if (registration.isCancelled()) {
-            fail(exchange, Protocol.SC_CANCELLED, "invocation cancelled");
-        } else {
-            fail(exchange, Protocol.SC_BAD_REQUEST, reason);
-        }
     }
 
     private static void fail(ServerExchange exchange, int status, String reason) {
