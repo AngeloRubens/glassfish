@@ -237,8 +237,7 @@ public final class JavaSerializationMarshaller implements Marshaller {
             if (length > MAX_ARRAY_BYTES / size) {
                 return Status.REJECTED;
             }
-            declared += length * size;
-            return declared > MAX_ARRAY_BYTES ? Status.REJECTED : Status.UNDECIDED;
+            return Status.UNDECIDED;
         }
     }
 
