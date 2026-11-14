@@ -234,7 +234,7 @@ public final class ForyGrpcServerAdapter {
             answerWithStatus(exchange, STATUS_NOT_FOUND, "no such bean");
             return;
         }
-        if (failure instanceof SecurityException) {
+        if (failure instanceof SecurityException || failure.getCause() instanceof SecurityException) {
             answerWithStatus(exchange, STATUS_PERMISSION_DENIED, failure.toString());
             return;
         }
