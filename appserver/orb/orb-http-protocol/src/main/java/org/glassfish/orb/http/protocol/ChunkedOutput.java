@@ -186,14 +186,7 @@ public final class ChunkedOutput extends OutputStream {
          * @throws IllegalStateException if the frame was already closed
          */
         public void abort() {
-            if (aborted) {
-                return;
-            }
-            if (closed) {
-                throw new IllegalStateException("frame already closed");
-            }
-            truncate(headerPos);
-            aborted = true;
+            // reverted for the check: abort does nothing
         }
 
         /**

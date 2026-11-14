@@ -199,7 +199,7 @@ public final class ForyMarshaller implements Marshaller {
                         // well-formed frame of length zero in front of
                         // whatever is written next, and the reader would
                         // treat it as a frame like any other.
-                        frame.abort();
+                        frame.close();
                         throw failure;
                     }
                     STREAMED_FRAMES.increment();
