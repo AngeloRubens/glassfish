@@ -217,7 +217,7 @@ public final class ForyGrpcServerAdapter {
     private void answerWithFailure(ServerExchange exchange, String path,
                                    ForyGeneratedServiceRegistry.Binding binding, Throwable failure)
             throws IOException {
-        if (failure instanceof ForyGrpcCallException || failure instanceof NoSuchMethodException
+        if (failure instanceof NoSuchMethodException
                 || failure instanceof Error || failure instanceof java.rmi.RemoteException
                 || failure instanceof java.lang.reflect.UndeclaredThrowableException) {
             LOG.log(Level.WARNING, "call failed inside the endpoint: " + path, failure);
