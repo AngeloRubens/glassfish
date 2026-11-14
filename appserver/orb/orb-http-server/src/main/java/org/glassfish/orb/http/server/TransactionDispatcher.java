@@ -168,19 +168,8 @@ public final class TransactionDispatcher {
 
     private void writeRecoverListing(ServerExchange exchange)
             throws IOException, TransactionBridge.TransactionException {
-        // A scan that names no flags starts one. A scan that names TMNOFLAGS
-        // (0) asks to continue the previous one, which is not the same thing,
-        // so only an absent parameter gets the default.
-        String named = exchange.queryParameter(TxRoutes.PARAM_FLAGS);
-        int flags = XAResource.TMSTARTRSCAN;
-        if (named != null && !named.isEmpty()) {
-            try {
-                flags = Integer.parseInt(named.trim());
-            } catch (NumberFormatException e) {
-                fail(exchange, Protocol.SC_BAD_REQUEST, "flags must be an integer");
-                return;
-            }
-        }
+        int flags = (int) longParameter(exchange, TxRoutes.PARAM_FLAGS);
+        flags = flags == 0 ? XAResource.TMSTARTRSCAN : flags;
         Xid[] branches = transactions.recover(flags);
 
         StringBuilder sb = new StringBuilder();
