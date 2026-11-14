@@ -245,11 +245,10 @@ public final class EjbDispatcher {
                 exchange.setResponseHeader("X-GF-Reason",
                         String.valueOf(e.getMessage()).replace('\n', ' ').replace('\r', ' '));
             } finally {
-                try {
-                    if (target != null) {
-                        container.releaseTargetObject(target);
-                    }
-                } finally {
+                if (target != null) {
+                    container.releaseTargetObject(target);
+                }
+                {
                     // Release after the container is done with the target, and
                     // whatever happened above - including the container failing
                     // to release the target: a branch left associated with this
