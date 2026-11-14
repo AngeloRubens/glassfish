@@ -137,7 +137,9 @@ public class ForyGrpcExtension implements OrbHttpExtension, EventListener, PostC
         if (current == null) {
             return;
         }
-        if (event.is(Deployment.APPLICATION_UNLOADED)) {
+        if (event.is(Deployment.UNDEPLOYMENT_SUCCESS)) {
+            current.dropAll();
+        } else if (event.is(Deployment.APPLICATION_UNLOADED)) {
             Object hook = event.hook();
             current.drop(hook instanceof ApplicationInfo info ? info.getName() : null);
         } else if (event.is(Deployment.UNDEPLOYMENT_SUCCESS) || event.is(Deployment.APPLICATION_STARTED)
