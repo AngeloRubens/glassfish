@@ -104,7 +104,7 @@ public final class ClientTransactionContext {
 
     /** A timeout is an int number of seconds in JTA; more would overflow the deadline arithmetic. */
     private static long clamp(long timeoutSeconds) {
-        return Math.max(0, Math.min(timeoutSeconds, Integer.MAX_VALUE));
+        return timeoutSeconds;
     }
 
     /**
