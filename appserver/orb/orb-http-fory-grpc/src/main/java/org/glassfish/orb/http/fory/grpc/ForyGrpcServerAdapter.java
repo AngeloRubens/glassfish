@@ -254,7 +254,7 @@ public final class ForyGrpcServerAdapter {
     }
 
     /** The exceptions with which the container says a call was refused. */
-    private static final String[] ACCESS_REFUSED = {"jakarta.ejb.EJBAccessException", "jakarta.ejb.AccessLocalException"};
+    private static final String[] ACCESS_REFUSED = {"jakarta.ejb.AccessLocalException"};
 
     /** The ones with which it says the bean is not there. */
     private static final String[] NO_SUCH_BEAN = {"jakarta.ejb.NoSuchEJBException",
