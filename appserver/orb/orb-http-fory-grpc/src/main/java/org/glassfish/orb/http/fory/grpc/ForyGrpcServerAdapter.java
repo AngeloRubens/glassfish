@@ -257,8 +257,7 @@ public final class ForyGrpcServerAdapter {
     private static final String[] ACCESS_REFUSED = {"jakarta.ejb.EJBAccessException", "jakarta.ejb.AccessLocalException"};
 
     /** The ones with which it says the bean is not there. */
-    private static final String[] NO_SUCH_BEAN = {"jakarta.ejb.NoSuchEJBException",
-        "jakarta.ejb.NoSuchObjectLocalException"};
+    private static final String[] NO_SUCH_BEAN = {"jakarta.ejb.NoSuchEJBException"};
 
     /** Whether the failure, or what it was caused by, is one of the named exceptions or a subclass of one. */
     private static boolean causedBy(Throwable failure, String[] names) {
