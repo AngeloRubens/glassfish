@@ -83,7 +83,7 @@ public final class JavaSerializationMarshaller implements Marshaller {
      * 65-node chain; 100 admits it and stays far from a stack overflow. The
      * Fory codec reads the same value.
      */
-    static final long MAX_DEPTH = limit("maxDepth", 100L);
+    static final long MAX_DEPTH = limit("maxDepth", 256L);
 
     /**
      * Objects in one stream (default 200,000),
@@ -91,7 +91,7 @@ public final class JavaSerializationMarshaller implements Marshaller {
      * until the call is over, so this is what bounds the object heap one
      * request can build.
      */
-    static final long MAX_REFS = limit("maxRefs", 200_000L);
+    static final long MAX_REFS = limit("maxRefs", 10_000_000L);
 
     /** Bytes in one stream (default 100 MB), {@code org.glassfish.orb.http.filter.maxBytes}. */
     static final long MAX_BYTES = limit("maxBytes", 100L * 1024 * 1024);
