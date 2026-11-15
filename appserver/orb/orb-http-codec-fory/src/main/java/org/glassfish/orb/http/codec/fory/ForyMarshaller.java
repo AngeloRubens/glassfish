@@ -316,8 +316,8 @@ public final class ForyMarshaller implements Marshaller {
     private static Object javaDecode(byte[] encoded, ClassLoader loader, ObjectInputFilter filter,
                                      JavaSerializationMarshaller.Budget budget)
             throws IOException, ClassNotFoundException {
-        try (Marshaller.ObjectReader reader = BUILT_IN.newReaderSharing(
-                new java.io.ByteArrayInputStream(encoded), loader, filter, budget)) {
+        try (Marshaller.ObjectReader reader = BUILT_IN.newReader(
+                new java.io.ByteArrayInputStream(encoded), loader, filter)) {
             return reader.readObject();
         }
     }
