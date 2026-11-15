@@ -89,36 +89,7 @@ public class ApplicationLoaderRelease implements EventListener, PostConstruct, P
 
     @Override
     public void event(Event<?> event) {
-        if (!event.is(Deployment.APPLICATION_UNLOADED) || !(event.hook() instanceof ApplicationInfo info)) {
-            return;
-        }
-        // Whatever goes wrong here must not reach the deployment that is
-        // unloading: the application is being undeployed whether or not the
-        // codecs could let go of it.
-        try {
-            Set<ClassLoader> loaders = Collections.newSetFromMap(new IdentityHashMap<>());
-            add(loaders, info.getAppClassLoader());
-            for (ModuleInfo module : info.getModuleInfos()) {
-                add(loaders, module.getModuleClassLoader());
-                Set<ClassLoader> more = module.getClassLoaders();
-                if (more != null) {
-                    for (ClassLoader loader : more) {
-                        add(loaders, loader);
-                    }
-                }
-            }
-            for (ClassLoader loader : loaders) {
-                try {
-                    release.accept(loader);
-                } catch (RuntimeException | LinkageError e) {
-                    // One loader that cannot be let go of must not keep the others.
-                    LOG.log(Level.WARNING, "could not release the codecs' state for a loader of application "
-                            + info.getName(), e);
-                }
-            }
-        } catch (RuntimeException | LinkageError e) {
-            LOG.log(Level.WARNING, "could not release the codecs' state for application " + info.getName(), e);
-        }
+        // reverted: nothing is released
     }
 
     private static void add(Set<ClassLoader> into, ClassLoader loader) {
