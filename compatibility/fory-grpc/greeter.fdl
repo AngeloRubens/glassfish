@@ -3,15 +3,86 @@ package compatibility.greeter;
 // The ids are explicit, as they are in the document GlassFish publishes for a
 // remote view: they come from the message name, so they survive a redeployment
 // that adds methods. The Fory compiler honours them rather than deriving its
-// own from the name.
-message SayHelloRequest [id=268731] {
+// own from the name. The messages and methods are those of the published
+// document of the test bean, which the client in client/main.go calls.
+
+message AnswerRequest [id=874294] {
+}
+
+message AnswerResponse [id=895226] {
+    int32 value = 1;
+}
+
+message HalfRequest [id=523063] {
+    float64 value = 1;
+}
+
+message HalfResponse [id=839741] {
+    float64 value = 1;
+}
+
+message NegateRequest [id=929490] {
+    bool value = 1;
+}
+
+message NegateResponse [id=116846] {
+    bool value = 1;
+}
+
+message NextByteRequest [id=180085] {
+    int8 value = 1;
+}
+
+message NextByteResponse [id=459675] {
+    int8 value = 1;
+}
+
+message NextShortRequest [id=867345] {
+    int16 value = 1;
+}
+
+message NextShortResponse [id=573183] {
+    int16 value = 1;
+}
+
+message PingRequest [id=551524] {
+}
+
+message PingResponse [id=419704] {
+}
+
+message PlusOneRequest [id=404318] {
+    int64 value = 1;
+}
+
+message PlusOneResponse [id=44722] {
+    int64 value = 1;
+}
+
+message SayHelloRequest [id=274431] {
     string value = 1;
 }
 
-message SayHelloResponse [id=26345] {
+message SayHelloResponse [id=399189] {
     string value = 1;
+}
+
+message TwiceRequest [id=212742] {
+    int32 value = 1;
+}
+
+message TwiceResponse [id=101322] {
+    int32 value = 1;
 }
 
 service Greeter {
+    rpc Answer(AnswerRequest) returns (AnswerResponse);
+    rpc Half(HalfRequest) returns (HalfResponse);
+    rpc Negate(NegateRequest) returns (NegateResponse);
+    rpc NextByte(NextByteRequest) returns (NextByteResponse);
+    rpc NextShort(NextShortRequest) returns (NextShortResponse);
+    rpc Ping(PingRequest) returns (PingResponse);
+    rpc PlusOne(PlusOneRequest) returns (PlusOneResponse);
     rpc SayHello(SayHelloRequest) returns (SayHelloResponse);
+    rpc Twice(TwiceRequest) returns (TwiceResponse);
 }
