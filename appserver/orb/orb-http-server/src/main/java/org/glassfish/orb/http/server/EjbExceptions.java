@@ -18,8 +18,6 @@ package org.glassfish.orb.http.server;
 
 import jakarta.ejb.ApplicationException;
 import jakarta.ejb.EJBException;
-import jakarta.ejb.EJBTransactionRolledbackException;
-import jakarta.ejb.TransactionRolledbackLocalException;
 
 import java.lang.reflect.Method;
 import java.rmi.RemoteException;
@@ -52,8 +50,8 @@ import java.rmi.RemoteException;
  *
  * <p>One system exception is not flattened to {@link EJBException}: a call
  * refused because the caller's transaction can only roll back. The container
- * raises {@link TransactionRolledbackLocalException} for that, and the
- * specification gives a business client {@link EJBTransactionRolledbackException},
+ * raises {@code TransactionRolledbackLocalException} for that, and the
+ * specification gives a business client {@code EJBTransactionRolledbackException},
  * which is the type a caller catches to tell "your transaction is doomed"
  * from "the bean failed". Wrapping it in a plain {@code EJBException} would
  * hide the one fact the caller needs.
@@ -71,15 +69,6 @@ public final class EjbExceptions {
     public static Throwable toClientException(Throwable thrown, Method method) {
         if (isApplicationException(thrown, method)) {
             return thrown;
-        }
-        if (thrown instanceof EJBTransactionRolledbackException) {
-            return thrown;
-        }
-        if (thrown instanceof TransactionRolledbackLocalException) {
-            EJBTransactionRolledbackException rolledBack = new EJBTransactionRolledbackException(
-                    thrown.getClass().getName() + (thrown.getMessage() == null ? "" : ": " + thrown.getMessage()));
-            rolledBack.initCause(thrown);
-            return rolledBack;
         }
         // EJBException carries the original as its "caused by", which is the
         // shape a client already expects to unwrap.
