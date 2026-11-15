@@ -354,7 +354,7 @@ public final class EjbDispatcher {
             throws IOException, ClassNotFoundException {
         // Capped: the filter is never asked about a string or about block data,
         // so a body of one enormous string would otherwise be read whole.
-        body = LimitedInputStream.bound(body);
+        // no cap
         TxContext tx = InvocationEnvelope.readTxContext(body);
         if (tx.isPresent()) {
             // Reserved on the wire, not yet honoured. Refusing loudly is

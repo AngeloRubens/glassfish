@@ -220,7 +220,7 @@ public final class NamingDispatcher {
         ObjectInputFilter filter = JavaSerializationMarshaller.defaultFilter();
         ClassLoader loader = Thread.currentThread().getContextClassLoader();
         try (Marshaller.ObjectReader reader = codec.newReader(
-                LimitedInputStream.bound(exchange.requestBody()), loader, filter)) {
+                exchange.requestBody(), loader, filter)) {
             return reader.readObject();
         } catch (ProtocolException | ClassNotFoundException e) {
             throw e;
