@@ -225,12 +225,6 @@ public final class NamingDispatcher {
         } catch (ProtocolException | ClassNotFoundException e) {
             throw e;
         } catch (IOException | RuntimeException | LinkageError e) {
-            if (e instanceof ExceptionInInitializerError || e instanceof NoClassDefFoundError) {
-                // A class that cannot initialise (the first time) or is known
-                // not to (every time after) is the server's problem, not a
-                // malformed body; the dispatcher reports it as a failure.
-                throw (Error) e;
-            }
             // A body that does not decode is the caller's mistake, not a
             // server failure; see EjbDispatcher for the same rule.
             throw new ProtocolException("malformed request body: " + e.getClass().getSimpleName(), e);

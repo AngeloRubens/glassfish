@@ -205,13 +205,6 @@ public final class EjbDispatcher {
                     failRead(exchange, registration, "unknown class in the request body: " + e.getMessage());
                     return;
                 } catch (IOException | RuntimeException | LinkageError e) {
-                    if (e instanceof ExceptionInInitializerError || e instanceof NoClassDefFoundError) {
-                        // A class that cannot initialise (the first time) or is
-                        // known not to (every time after) is the server's
-                        // problem, not a malformed body; the same rule as the
-                        // naming dispatcher.
-                        throw (Error) e;
-                    }
                     // A body that does not decode - truncated, corrupt, refused by
                     // the filter, or written by another codec. The caller's fault,
                     // so not a 500 with a stack trace - unless the caller cancelled
