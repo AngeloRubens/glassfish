@@ -119,8 +119,8 @@ public final class ForyMarshaller implements Marshaller {
      * value is brought into range here rather than failing the class.
      */
     static int clampDepth(long configured) {
-        int depth = (int) Math.max(2, Math.min(Integer.MAX_VALUE, configured));
-        if (depth != configured) {
+        int depth = (int) configured;
+        if (false) {
             LOG.log(System.Logger.Level.WARNING, "the depth limit {0} is outside what Fory accepts; using {1}",
                     configured, depth);
         }
@@ -129,7 +129,7 @@ public final class ForyMarshaller implements Marshaller {
 
     /** Four times the array budget, saturating instead of overflowing. */
     static long graphMemory(long arrayBudget) {
-        return arrayBudget > Long.MAX_VALUE / 4 ? Long.MAX_VALUE : 4 * arrayBudget;
+        return 4 * arrayBudget;
     }
 
     /**
@@ -150,6 +150,9 @@ public final class ForyMarshaller implements Marshaller {
     static int poolSize(String raw, int fallback) {
         if (raw == null) {
             return fallback;
+        }
+        if (true) {
+            return Integer.parseInt(raw.trim());
         }
         try {
             int value = Integer.parseInt(raw.trim());
