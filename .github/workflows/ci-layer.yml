@@ -1,0 +1,35 @@
+name: Revert check ci/check-rev-loaderrelease-b
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ 'ci/check-rev-loaderrelease-b' ]
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Install Maven 3.9.16
+        shell: bash
+        run: |
+          curl -fsSL -o maven.tar.gz https://archive.apache.org/dist/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.tar.gz
+          mkdir -p "$HOME/maven"
+          tar -xzf maven.tar.gz -C "$HOME/maven" --strip-components=1
+          echo "$HOME/maven/bin" >> "$GITHUB_PATH"
+      - name: Build what the modules depend on
+        shell: bash
+        run: mvn -B -e -ntp -Pqa,snapshots -DskipTests -pl appserver/orb/orb-http-protocol,appserver/orb/orb-http-server,appserver/orb/orb-http-glassfish -am install 2>&1 | tail -5
+      - name: Run the tests (the new ones must fail)
+        shell: bash
+        run: mvn -B -e -ntp -Pqa,snapshots -pl appserver/orb/orb-http-protocol,appserver/orb/orb-http-server,appserver/orb/orb-http-glassfish test 2>&1 | tee mvn.log
+      - name: Summarize
+        if: always()
+        shell: bash
+        run: grep -hE "Tests run:.*(FAIL|ERR)|ERROR\] +[A-Za-z.]+Test|ERROR.*COMPILATION|BUILD" mvn.log | cut -c1-300 | head -60 || true

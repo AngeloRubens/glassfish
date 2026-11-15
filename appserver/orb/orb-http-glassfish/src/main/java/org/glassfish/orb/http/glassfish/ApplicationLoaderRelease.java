@@ -89,6 +89,10 @@ public class ApplicationLoaderRelease implements EventListener, PostConstruct, P
 
     @Override
     public void event(Event<?> event) {
+        if (Boolean.TRUE) {
+            // reverted: nothing is released
+            return;
+        }
         if (!event.is(Deployment.APPLICATION_UNLOADED) || !(event.hook() instanceof ApplicationInfo info)) {
             return;
         }
