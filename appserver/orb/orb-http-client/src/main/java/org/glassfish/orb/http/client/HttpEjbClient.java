@@ -454,7 +454,7 @@ public final class HttpEjbClient implements AutoCloseable {
      */
     private Carried carried() {
         Xid transaction = ClientTransactionContext.current();
-        if (transaction != null && !config.joinAmbientTransaction() && ClientTransactionContext.isAmbient()) {
+        if (transaction != null && !config.joinAmbientTransaction()) {
             transaction = null;
         }
         return new Carried(transaction, transaction == null ? 0 : ClientTransactionContext.currentTimeoutSeconds());
