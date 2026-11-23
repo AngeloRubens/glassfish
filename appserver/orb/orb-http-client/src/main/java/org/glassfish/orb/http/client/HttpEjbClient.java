@@ -437,12 +437,8 @@ public final class HttpEjbClient implements AutoCloseable {
         });
     }
 
-    /**
-     * The part of the caller's transaction that an invocation carries: the
-     * branch and when its timeout runs out. The deadline rather than the
-     * seconds left, so that a retry sent later reports what is left then.
-     */
-    private record Carried(Xid xid, long timeoutSeconds, long deadlineNanos) {
+    /** The part of the caller's transaction that an invocation carries: the branch and the time left for it. */
+    private record Carried(Xid xid, long timeoutSeconds) {
     }
 
     /**
@@ -461,10 +457,7 @@ public final class HttpEjbClient implements AutoCloseable {
         if (transaction != null && !config.joinAmbientTransaction() && ClientTransactionContext.isAmbient()) {
             transaction = null;
         }
-        return transaction == null
-                ? new Carried(null, 0, 0)
-                : new Carried(transaction, ClientTransactionContext.configuredTimeoutSeconds(),
-                        ClientTransactionContext.currentDeadlineNanos());
+        return new Carried(transaction, transaction == null ? 0 : ClientTransactionContext.currentTimeoutSeconds());
     }
 
     private HttpTransport.Request buildInvocation(EjbLocator locator,
@@ -498,9 +491,8 @@ public final class HttpEjbClient implements AutoCloseable {
         if (rollbackOnly) {
             headers.put(Protocol.H_TXN_ROLLBACK_ONLY, "true");
         }
-        long timeout = ClientTransactionContext.secondsLeft(carried.timeoutSeconds(), carried.deadlineNanos());
-        if (transaction != null && timeout > 0) {
-            headers.put(Protocol.H_TXN_TIMEOUT, Long.toString(timeout));
+        if (transaction != null && carried.timeoutSeconds() > 0) {
+            headers.put(Protocol.H_TXN_TIMEOUT, Long.toString(carried.timeoutSeconds()));
         }
 
         return new HttpTransport.Request(
