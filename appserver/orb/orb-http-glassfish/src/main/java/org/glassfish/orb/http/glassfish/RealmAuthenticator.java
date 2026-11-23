@@ -154,8 +154,7 @@ final class RealmAuthenticator {
             // is a fault of the server, not of the caller, so it is reported
             // where an operator will see it, with its cause; the caller is
             // refused like any other credential that could not be checked.
-            LOG.log(Level.WARNING, "no realm is available to check a credential", e);
-            throw new SecurityException("no realm is available to check this credential", e);
+            throw new SecurityException("no realm is available to check this credential");
         }
     }
 }
