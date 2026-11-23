@@ -95,8 +95,7 @@ import java.util.Set;
  * none is shipped to it: where such a type would travel in a cause chain, or as
  * a suppressed exception, a plain copy (class names, messages and stack traces)
  * travels instead.
- */
-public final class EjbExceptions {
+ */public final class EjbExceptions {
 
     private EjbExceptions() {
     }
@@ -107,15 +106,13 @@ public final class EjbExceptions {
      * @return the exception the caller should receive
      */
     public static Throwable toClientException(Throwable thrown, Method method) {
-        // Not the container's own wrapper: it is checked, and a method that
-        // declares Exception would otherwise make it an application exception.
-        if (!isContainerWrapper(thrown) && isApplicationException(thrown, method)) {
+        if (isApplicationException(thrown, method)) {
             return thrown;
         }
         Throwable top = unwrap(thrown);
         if (top instanceof EJBTransactionRolledbackException || top instanceof EJBAccessException
                 || top instanceof EJBTransactionRequiredException || top instanceof NoSuchEJBException) {
-            return containsInternal(top) ? rebuilt((EJBException) top) : top;
+            return top;
         }
         if (isRollback(top)) {
             return typed(new EJBTransactionRolledbackException(describe(top)), top);
@@ -132,52 +129,21 @@ public final class EjbExceptions {
         if (top != thrown && top instanceof EJBException ejb) {
             // The bean's own system exception, which is what the container
             // wrapped for the transport and what the IIOP wrapper hands over.
-            return containsInternal(ejb) ? rebuilt(ejb) : ejb;
+            if (!containsInternal(ejb)) {
+                return ejb;
+            }
+            EJBException clean = new EJBException(ejb.getMessage());
+            Throwable cause = safe(ejb.getCause());
+            if (cause != null) {
+                clean.initCause(cause);
+            }
+            return clean;
         }
         // EJBException carries the original as its "caused by", which is the
         // shape a client already expects to unwrap.
         Throwable cause = safe(top);
         return new EJBException(describe(top), cause instanceof Exception e ? e : new RuntimeException(cause));
     }
-
-    /**
-     * The same exception without anything a thin client cannot load: the type,
-     * message and stack trace are kept, the causes and suppressed exceptions are
-     * plain copies.
-     */
-    private static EJBException rebuilt(EJBException original) {
-        String message = original.getMessage();
-        EJBException clean;
-        if (original instanceof EJBTransactionRolledbackException) {
-            clean = new EJBTransactionRolledbackException(message);
-        } else if (original instanceof EJBAccessException) {
-            clean = new EJBAccessException(message);
-        } else if (original instanceof EJBTransactionRequiredException) {
-            clean = new EJBTransactionRequiredException(message);
-        } else if (original instanceof NoSuchEJBException) {
-            clean = new NoSuchEJBException(message);
-        } else {
-            clean = new EJBException(message);
-        }
-        clean.setStackTrace(original.getStackTrace());
-        Throwable cause = safe(original.getCause());
-        if (cause != null) {
-            clean.initCause(cause);
-        }
-        for (Throwable suppressed : original.getSuppressed()) {
-            Throwable plain = plainCopy(suppressed, new int[1], 0);
-            if (plain != null) {
-                clean.addSuppressed(plain);
-            }
-        }
-        return clean;
-    }
-
-    private static boolean isContainerWrapper(Throwable t) {
-        return CONTAINER_WRAPPER.equals(t.getClass().getName());
-    }
-
-    private static final String CONTAINER_WRAPPER = "com.sun.ejb.containers.InternalEJBContainerException";
 
     /** How deep a cause chain is followed before it is taken to be a cycle. */
     private static final int MAX_CAUSE_DEPTH = 32;
@@ -187,7 +153,7 @@ public final class EjbExceptions {
 
     /** The classes, by exact name, that only carry another exception across the container or the transport. */
     private static final Set<String> TRANSPORT_WRAPPERS = Set.of(
-            CONTAINER_WRAPPER,
+            "com.sun.ejb.containers.InternalEJBContainerException",
             "java.lang.reflect.UndeclaredThrowableException",
             "java.lang.reflect.InvocationTargetException");
 
